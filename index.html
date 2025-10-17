@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Dental Admin Dashboard</title>
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --bg:#f6f8fb; --card:#ffffff; --muted:#6b7280; --accent:#3a86ff; --danger:#ef4444;
+      --success:#10b981; --radius:12px; --gap:16px; font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:#111827;min-height:100vh}
+    .app{display:flex;min-height:100vh}
+    /* Sidebar */
+    .sidebar{width:260px;background:linear-gradient(180deg,#0f172a,#111827);color:white;padding:20px;flex:0 0 260px}
+    .sidebar h1{font-size:18px;margin:0 0 14px}
+    .nav{display:flex;flex-direction:column;gap:8px}
+    .nav a{display:flex;align-items:center;padding:10px;border-radius:8px;color:rgba(255,255,255,0.9);text-decoration:none}
+    .nav a.active, .nav a:hover{background:rgba(255,255,255,0.06)}
+    .nav a span{margin-left:10px}
+    /* Main */
+    .main{flex:1;padding:20px}
+    .topbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px}
+    .search{flex:1;display:flex;gap:10px;align-items:center}
+    .search input{width:100%;padding:10px;border-radius:10px;border:1px solid #e6e9ef;background:white}
+    .card-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:18px}
+    .card{background:var(--card);padding:14px;border-radius:12px;box-shadow:0 6px 18px rgba(16,24,40,0.06)}
+    .card h3{margin:0 0 6px;font-size:13px;color:var(--muted)}
+    .card .value{font-size:20px;font-weight:600}
+    /* Table */
+    .table-wrap{background:var(--card);border-radius:12px;padding:14px;box-shadow:0 6px 18px rgba(16,24,40,0.06)}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:10px 8px;text-align:left;border-bottom:1px solid #eef2f7;font-size:14px}
+    th{font-weight:600;color:var(--muted);font-size:13px}
+    tr:hover td{background:#fbfdff}
+    .btn{display:inline-block;padding:8px 10px;border-radius:8px;border:none;cursor:pointer;font-weight:600}
+    .btn-primary{background:linear-gradient(90deg,var(--accent),#8338ec);color:white}
+    .btn-ghost{background:transparent;border:1px solid #e6e9ef}
+    .btn-danger{background:var(--danger);color:white}
+    .small{font-size:12px;padding:6px 8px;border-radius:6px}
+    .status-pending{background:#fff7ed;color:#b45309;padding:6px 8px;border-radius:8px}
+    .status-confirmed{background:#ecfdf5;color:#065f46;padding:6px 8px;border-radius:8px}
+    .flex{display:flex;gap:8px;align-items:center}
+    /* form */
+    .form-row{display:flex;gap:12px;margin-bottom:12px}
+    .form-row > *{flex:1}
+    input,select,textarea{padding:10px;border-radius:8px;border:1px solid #e6e9ef;background:white}
+    textarea{min-height:80px;resize:vertical}
+    .footer-note{color:var(--muted);font-size:13px;margin-top:10px}
+    /* responsive */
+    @media (max-width:880px){
+      .sidebar{display:none}
+      .app{flex-direction:column}
+      .main{padding:12px}
+    }
+  </style>
+</head>
+<body>
+
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <h1>Dental Admin</h1>
+    <div style="font-size:13px;color:rgba(255,255,255,0.8);margin-bottom:12px">Manage users & appointments</div>
+
+    <nav class="nav" id="nav">
+      <a href="#" data-page="dashboard" class="active"><span>Dashboard</span></a>
+      <a href="#" data-page="appointments"><span>Appointments</span></a>
+      <a href="#" data-page="users"><span>Users</span></a>
+      <a href="#" id="btnSignOut"><span>Sign Out</span></a>
+    </nav>
+
+    <div style="margin-top:20px;font-size:12px;color:rgba(255,255,255,0.6)">
+      Logged in as: <div id="adminEmail" style="font-weight:600;margin-top:6px"></div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+    <div class="topbar">
+      <div style="display:flex;align-items:center;gap:12px">
+        <h2 id="pageTitle" style="margin:0">Dashboard</h2>
+        <div class="search" style="max-width:560px">
+          <input id="globalSearch" placeholder="Search appointments or users..." />
+          <button class="btn btn-ghost" id="btnRefresh">Refresh</button>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="btn btn-primary" id="btnNewAppointment">+ New Appointment</button>
+        <div style="width:10px"></div>
+      </div>
+    </div>
+
+    <!-- Dashboard cards -->
+    <div id="page-dashboard">
+      <div class="card-row">
+        <div class="card">
+          <h3>Total Appointments</h3>
+          <div class="value" id="countAppointments">—</div>
+        </div>
+        <div class="card">
+          <h3>Upcoming (next 7d)</h3>
+          <div class="value" id="countNext7">—</div>
+        </div>
+        <div class="card">
+          <h3>Pending</h3>
+          <div class="value" id="countPending">—</div>
+        </div>
+        <div class="card">
+          <h3>Users</h3>
+          <div class="value" id="countUsers">—</div>
+        </div>
+      </div>
+
+      <div class="table-wrap" style="margin-top:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <h3 style="margin:0">Recent Appointments</h3>
+          <div class="flex">
+            <button class="btn btn-ghost" id="btnExportCSV">Export CSV</button>
+          </div>
+        </div>
+
+        <table id="appointmentsTable">
+          <thead>
+            <tr>
+              <th>Date</th><th>Time</th><th>Patient</th><th>Service</th><th>Dentist</th><th>Status</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Appointments page -->
+    <div id="page-appointments" style="display:none">
+      <div class="card" style="margin-bottom:12px">
+        <h3>Appointments</h3>
+        <div class="footer-note">Use search to filter by patient, service, dentist or date.</div>
+      </div>
+
+      <div class="table-wrap">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <h3 style="margin:0">All Appointments</h3>
+          <div class="flex">
+            <select id="filterStatus" style="padding:8px;border-radius:8px;border:1px solid #e6e9ef">
+              <option value="">All statuses</option>
+              <option value="Pending">Pending</option>
+              <option value="Confirmed">Confirmed</option>
+              <option value="Cancelled">Cancelled</option>
+            </select>
+            <button class="btn btn-ghost" id="btnExportAll">Export CSV</button>
+          </div>
+        </div>
+
+        <table id="allAppointmentsTable">
+          <thead>
+            <tr>
+              <th>Date</th><th>Time</th><th>Patient</th><th>Service</th><th>Dentist</th><th>Status</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Users page -->
+    <div id="page-users" style="display:none">
+      <div class="card" style="margin-bottom:12px">
+        <h3>Users</h3>
+        <div class="footer-note">Registered users (click to delete)</div>
+      </div>
+
+      <div class="table-wrap">
+        <table id="usersTable">
+          <thead><tr><th>Name</th><th>Email</th><th>Face Registered</th><th>Actions</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Settings page -->
+    <div id="page-settings" style="display:none">
+      <div class="card">
+        <h3>Settings</h3>
+        <div class="footer-note">Change simple settings or log out</div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Modal: New appointment (simple) -->
+<div id="modalNew" style="display:none;position:fixed;inset:0;background:rgba(3,7,18,0.5);align-items:center;justify-content:center;">
+  <div style="width:94%;max-width:720px;background:white;padding:18px;border-radius:12px;">
+    <h3 style="margin-top:0">Create Appointment</h3>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <input id="mDate" placeholder="YYYY-MM-DD" style="flex:1;padding:8px;border-radius:8px;border:1px solid #eee">
+      <input id="mTime" placeholder="10:00 AM" style="flex:1;padding:8px;border-radius:8px;border:1px solid #eee">
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <input id="mPatient" placeholder="Patient name" style="flex:1;padding:8px;border-radius:8px;border:1px solid #eee">
+      <input id="mEmail" placeholder="Email" style="flex:1;padding:8px;border-radius:8px;border:1px solid #eee">
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <input id="mService" placeholder="Service" style="flex:1;padding:8px;border-radius:8px;border:1px solid #eee">
+      <input id="mDentist" placeholder="Dentist" style="flex:1;padding:8px;border-radius:8px;border:1px solid #eee">
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <textarea id="mNotes" placeholder="Notes..." style="flex:1;padding:8px;border-radius:8px;border:1px solid #eee"></textarea>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-ghost" id="mCancel">Cancel</button>
+      <button class="btn btn-primary" id="mCreate">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+<script>
+/* ===================== CONFIG =======================
+   Replace the firebaseConfig object below with your Firebase project's config.
+   You can find it in Firebase Console -> Project Settings -> General -> Your apps (Web) -> Config
+*/
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+ const firebaseConfig = {
+    apiKey: "AIzaSyAhAB8p3S2kWTi28qepbUxV8rqPqLAgUkQ",
+    authDomain: "dentabliss.firebaseapp.com",
+    projectId: "dentabliss",
+    storageBucket: "dentabliss.firebasestorage.app",
+    messagingSenderId: "781165879537",
+    appId: "1:781165879537:web:daad98c54c4ea12195c950",
+    measurementId: "G-4TF8DE4T56"
+  };
+// init
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+/* ===================== UI HELPERS ===================== */
+const q = sel => document.querySelector(sel);
+const qAll = sel => Array.from(document.querySelectorAll(sel));
+const showPage = (pageId) => {
+  ['dashboard','appointments','users','settings'].forEach(p=>{
+    q('#page-'+p).style.display = (p===pageId ? '' : 'none');
+    q('#nav a[data-page="'+p+'"]').classList.toggle('active', p===pageId);
+  });
+  q('#pageTitle').innerText = pageId.charAt(0).toUpperCase()+pageId.slice(1);
+};
+
+/* ===================== AUTH UI ===================== */
+let currentAdmin = null;
+function requireLogin() {
+  auth.onAuthStateChanged(user => {
+    if (user) {
+      currentAdmin = user;
+      q('#adminEmail').innerText = user.email || '(no email)';
+      // load initial data
+      refreshCounts();
+      loadRecentAppointments();
+      loadAllAppointments();
+      loadUsers();
+    } else {
+      // no user — show a simple prompt
+      const email = prompt('Admin email:');
+      const pass = prompt('Password:');
+      if (!email || !pass) return alert('Login cancelled');
+      auth.signInWithEmailAndPassword(email, pass)
+        .catch(err => alert('Login failed: '+err.message));
+    }
+  });
+}
+requireLogin();
+
+/* ========== NAV ========= */
+qAll('#nav a[data-page]').forEach(a=>{
+  a.addEventListener('click', e=>{
+    e.preventDefault();
+    showPage(a.dataset.page);
+  });
+});
+q('#btnSignOut').addEventListener('click', ()=> auth.signOut().then(()=>location.reload()));
+
+/* ========== UTILS ========= */
+function formatDate(d){ try{ const dt=new Date(d); if(isNaN(dt)) return d; return dt.toLocaleDateString(); }catch(e){return d;} }
+function toCSV(rows, cols){
+  const esc = v => '"'+String(v||'').replace(/"/g,'""')+'"';
+  const head = cols.map(c=>esc(c)).join(',');
+  const body = rows.map(r => cols.map(c=>esc(r[c])).join(',')).join('\n');
+  return head + '\n' + body;
+}
+function downloadFile(filename, content){
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(content);
+  a.download = filename;
+  a.click();
+}
+
+/* ===================== APPOINTMENTS ===================== */
+async function refreshCounts(){
+  try{
+    const snapTotal = await db.collection('appointments').get();
+    q('#countAppointments').innerText = snapTotal.size;
+
+    // upcoming 7 days
+    const today = new Date(); const next7 = new Date(); next7.setDate(today.getDate()+7);
+    const sToday = today.toISOString().slice(0,10);
+    const sNext7 = next7.toISOString().slice(0,10);
+    const snapNext = await db.collection('appointments')
+      .where('date','>=', sToday)
+      .where('date','<=', sNext7)
+      .get();
+    q('#countNext7').innerText = snapNext.size;
+
+    const snapPending = await db.collection('appointments').where('status','==','Pending').get();
+    q('#countPending').innerText = snapPending.size;
+
+    const snapUsers = await db.collection('users').get();
+    q('#countUsers').innerText = snapUsers.size;
+  }catch(e){console.error(e)}
+}
+
+function createActionButton(text, cls, handler){ const b=document.createElement('button'); b.className='small '+cls; b.innerText=text; b.onclick=handler; return b; }
+
+async function loadRecentAppointments(limit=8){
+  const tbody = q('#appointmentsTable tbody');
+  tbody.innerHTML = '<tr><td colspan="7">Loading…</td></tr>';
+  try{
+    const today = new Date().toISOString().slice(0,10);
+const snap = await db.collection('appointments')
+  .where('date', '>=', today)
+  .orderBy('date')
+  .orderBy('time')
+  .limit(limit)
+  .get();
+
+    const rows = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    if(!rows.length) tbody.innerHTML = '<tr><td colspan="7">No recent appointments</td></tr>';
+    else {
+      tbody.innerHTML = '';
+      rows.forEach(r=>{
+        const tr=document.createElement('tr');
+        tr.innerHTML = `
+          <td>${r.date||''}</td>
+          <td>${r.time||''}</td>
+          <td>${r.patientName||r.patientName||r.patient || '—'}</td>
+          <td>${r.service||''}</td>
+          <td>${r.dentist||''}</td>
+          <td>${r.status||'Pending'}</td>
+          <td></td>
+        `;
+        const actionsCell = tr.querySelector('td:last-child');
+
+        actionsCell.appendChild(createActionButton('Confirm','btn-primary', async ()=>{
+          await db.collection('appointments').doc(r.id).update({status:'Confirmed', updatedAt: firebase.firestore.FieldValue.serverTimestamp()});
+          await refreshCounts(); loadRecentAppointments(limit); loadAllAppointments();
+        }));
+
+        actionsCell.appendChild(createActionButton('Cancel','btn-ghost', async ()=>{
+          await db.collection('appointments').doc(r.id).update({status:'Cancelled', updatedAt: firebase.firestore.FieldValue.serverTimestamp()});
+          await refreshCounts(); loadRecentAppointments(limit); loadAllAppointments();
+        }));
+
+        actionsCell.appendChild(createActionButton('Delete','btn-danger', async ()=>{
+          if(confirm('Delete appointment?')){ await db.collection('appointments').doc(r.id).delete(); await refreshCounts(); loadRecentAppointments(limit); loadAllAppointments(); }
+        }));
+
+        tbody.appendChild(tr);
+      });
+    }
+  }catch(e){ console.error(e); tbody.innerHTML = '<tr><td colspan="7">Error loading</td></tr>'; }
+}
+
+async function loadAllAppointments(){
+  const tbody = q('#allAppointmentsTable tbody');
+  tbody.innerHTML = '<tr><td colspan="7">Loading…</td></tr>';
+  try{
+    const snap = await db.collection('appointments').orderBy('date').orderBy('time').get();
+    const rows = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    if(!rows.length) tbody.innerHTML = '<tr><td colspan="7">No appointments</td></tr>';
+    else {
+      tbody.innerHTML = '';
+      rows.forEach(r=>{
+        const tr=document.createElement('tr');
+        tr.innerHTML = `<td>${r.date||''}</td><td>${r.time||''}</td><td>${r.patientName||r.patient||''}</td><td>${r.service||''}</td><td>${r.dentist||''}</td><td>${r.status||'Pending'}</td><td></td>`;
+        const cell = tr.querySelector('td:last-child');
+        cell.appendChild(createActionButton('Confirm','btn-primary', async ()=>{
+          await db.collection('appointments').doc(r.id).update({status:'Confirmed', updatedAt: firebase.firestore.FieldValue.serverTimestamp()});
+          await refreshCounts(); loadRecentAppointments(); loadAllAppointments();
+        }));
+        cell.appendChild(createActionButton('Cancel','btn-ghost', async ()=>{
+          await db.collection('appointments').doc(r.id).update({status:'Cancelled', updatedAt: firebase.firestore.FieldValue.serverTimestamp()});
+          await refreshCounts(); loadRecentAppointments(); loadAllAppointments();
+        }));
+        cell.appendChild(createActionButton('Delete','btn-danger', async ()=>{
+          if(confirm('Delete appointment?')){ await db.collection('appointments').doc(r.id).delete(); await refreshCounts(); loadRecentAppointments(); loadAllAppointments(); }
+        }));
+        tbody.appendChild(tr);
+      });
+    }
+  }catch(e){ console.error(e); tbody.innerHTML = '<tr><td colspan="7">Error loading</td></tr>'; }
+}
+
+/* ===================== USERS ===================== */
+async function loadUsers(){
+  const tbody = q('#usersTable tbody');
+  tbody.innerHTML = '<tr><td colspan="4">Loading…</td></tr>';
+  try{
+    const snap = await db.collection('users').orderBy('name').get();
+    const rows = snap.docs.map(d=>({id:d.id,...d.data()}));
+    if(!rows.length) tbody.innerHTML = '<tr><td colspan="4">No users</td></tr>';
+    else {
+      tbody.innerHTML = '';
+      rows.forEach(u=>{
+        const tr=document.createElement('tr');
+        tr.innerHTML = `<td>${u.name||'—'}</td><td>${u.email||'—'}</td><td>${u.faceRegistered? 'Yes':'No'}</td><td></td>`;
+        const cell = tr.querySelector('td:last-child');
+        cell.appendChild(createActionButton('Delete','btn-danger', async ()=>{
+          if(confirm('Delete user? This will not revoke auth record.')) {
+            await db.collection('users').doc(u.id).delete();
+            await loadUsers();
+            await refreshCounts();
+          }
+        }));
+        tbody.appendChild(tr);
+      });
+    }
+  }catch(e){ console.error(e); tbody.innerHTML = '<tr><td colspan="4">Error loading</td></tr>'; }
+}
+
+/* ===================== CREATE APPOINTMENT (modal) ===================== */
+q('#btnNewAppointment').addEventListener('click', ()=> q('#modalNew').style.display = 'flex');
+q('#mCancel').addEventListener('click', ()=> q('#modalNew').style.display = 'none');
+q('#mCreate').addEventListener('click', async ()=>{
+  const date=q('#mDate').value.trim(), time=q('#mTime').value.trim(), patient=q('#mPatient').value.trim();
+  const email=q('#mEmail').value.trim(), service=q('#mService').value.trim(), dentist=q('#mDentist').value.trim(), notes=q('#mNotes').value.trim();
+  if(!date||!time||!patient){ return alert('Date, time and patient required'); }
+  const id = db.collection('appointments').doc().id;
+  await db.collection('appointments').doc(id).set({
+    appointmentId: id,
+    userId: 'admin-created',
+    patientName: patient,
+    patientEmail: email || '',
+    service: service || '',
+    dentist: dentist || '',
+    date: date,
+    time: time,
+    notes: notes || '',
+    status: 'Pending',
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+  q('#modalNew').style.display = 'none';
+  q('#mDate').value='';q('#mTime').value='';q('#mPatient').value='';q('#mService').value='';
+  await refreshCounts(); loadRecentAppointments(); loadAllAppointments();
+});
+
+/* ========== SEARCH / FILTER / EXPORT ========= */
+q('#globalSearch').addEventListener('input', (e)=>{
+  const term = e.target.value.toLowerCase();
+  filterTables(term);
+});
+
+function filterTables(term){
+  // appointments table
+  qAll('#appointmentsTable tbody tr').forEach(tr=>{
+    const text = tr.innerText.toLowerCase();
+    tr.style.display = text.includes(term) ? '' : 'none';
+  });
+  qAll('#allAppointmentsTable tbody tr').forEach(tr=>{
+    const text = tr.innerText.toLowerCase();
+    tr.style.display = text.includes(term) ? '' : 'none';
+  });
+  qAll('#usersTable tbody tr').forEach(tr=>{
+    const text = tr.innerText.toLowerCase();
+    tr.style.display = text.includes(term) ? '' : 'none';
+  });
+}
+
+q('#btnRefresh').addEventListener('click', async ()=>{
+  await refreshCounts(); loadRecentAppointments(); loadAllAppointments(); loadUsers();
+});
+
+q('#filterStatus').addEventListener('change', (e)=>{
+  const val = e.target.value;
+  qAll('#allAppointmentsTable tbody tr').forEach(tr=>{
+    tr.style.display = (!val || tr.innerText.includes(val)) ? '' : 'none';
+  });
+});
+
+q('#btnExportCSV').addEventListener('click', async ()=>{
+  // export current recent table rows to csv
+  const rows = Array.from(document.querySelectorAll('#appointmentsTable tbody tr')).map(tr=>{
+    const cols = tr.querySelectorAll('td');
+    return { date:cols[0].innerText, time:cols[1].innerText, patient:cols[2].innerText, service:cols[3].innerText, dentist:cols[4].innerText, status:cols[5].innerText };
+  }).filter(r=>r.date);
+  const csv = toCSV(rows, ['date','time','patient','service','dentist','status']);
+  downloadFile('appointments.csv', csv);
+});
+
+q('#btnExportAll').addEventListener('click', async ()=>{
+  const rows = Array.from(document.querySelectorAll('#allAppointmentsTable tbody tr')).map(tr=>{
+    const cols = tr.querySelectorAll('td');
+    return { date:cols[0].innerText, time:cols[1].innerText, patient:cols[2].innerText, service:cols[3].innerText, dentist:cols[4].innerText, status:cols[5].innerText };
+  }).filter(r=>r.date);
+  const csv = toCSV(rows, ['date','time','patient','service','dentist','status']);
+  downloadFile('appointments_all.csv', csv);
+});
+
+/* ========== INITIAL load ========== */
+async function initialLoad(){
+  showPage('dashboard');
+  // if already logged in auth listener will run and populate
+}
+initialLoad();
+</script>
+
+</body>
+</html>
