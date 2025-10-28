@@ -305,6 +305,33 @@ function downloadFile(filename, content){
   a.click();
 }
 
+/* ========== EMAIL REMINDER FUNCTION ========= */
+async function sendAppointmentReminder(appointmentData) {
+    try {
+        const response = await fetch('https://us-central1-dentabliss.cloudfunctions.net/sendAppointmentReminders', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                appointmentId: appointmentData.id,
+                action: 'confirm'
+            })
+        });
+        
+        if (response.ok) {
+            console.log('Reminder email sent successfully');
+            return true;
+        } else {
+            console.error('Failed to send reminder email');
+            return false;
+        }
+    } catch (error) {
+        console.error('Error sending reminder:', error);
+        return false;
+    }
+}
+
 /* ===================== APPOINTMENTS ===================== */
 async function refreshCounts(){
   try{
@@ -361,17 +388,42 @@ const snap = await db.collection('appointments')
         const actionsCell = tr.querySelector('td:last-child');
 
         actionsCell.appendChild(createActionButton('Confirm','btn-primary', async ()=>{
-          await db.collection('appointments').doc(r.id).update({status:'Confirmed', updatedAt: firebase.firestore.FieldValue.serverTimestamp()});
-          await refreshCounts(); loadRecentAppointments(limit); loadAllAppointments();
+          // First update the status to Confirmed
+          await db.collection('appointments').doc(r.id).update({
+            status:'Confirmed', 
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+          
+          // Then send reminder email
+          const emailSent = await sendAppointmentReminder(r);
+          if (emailSent) {
+            alert('Appointment confirmed and reminder email sent!');
+          } else {
+            alert('Appointment confirmed and reminder email sent!.');
+          }
+          
+          await refreshCounts(); 
+          loadRecentAppointments(limit); 
+          loadAllAppointments();
         }));
 
         actionsCell.appendChild(createActionButton('Cancel','btn-ghost', async ()=>{
-          await db.collection('appointments').doc(r.id).update({status:'Cancelled', updatedAt: firebase.firestore.FieldValue.serverTimestamp()});
-          await refreshCounts(); loadRecentAppointments(limit); loadAllAppointments();
+          await db.collection('appointments').doc(r.id).update({
+            status:'Cancelled', 
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+          await refreshCounts(); 
+          loadRecentAppointments(limit); 
+          loadAllAppointments();
         }));
 
         actionsCell.appendChild(createActionButton('Delete','btn-danger', async ()=>{
-          if(confirm('Delete appointment?')){ await db.collection('appointments').doc(r.id).delete(); await refreshCounts(); loadRecentAppointments(limit); loadAllAppointments(); }
+          if(confirm('Delete appointment?')){ 
+            await db.collection('appointments').doc(r.id).delete(); 
+            await refreshCounts(); 
+            loadRecentAppointments(limit); 
+            loadAllAppointments(); 
+          }
         }));
 
         tbody.appendChild(tr);
@@ -393,17 +445,46 @@ async function loadAllAppointments(){
         const tr=document.createElement('tr');
         tr.innerHTML = `<td>${r.date||''}</td><td>${r.time||''}</td><td>${r.patientName||r.patient||''}</td><td>${r.service||''}</td><td>${r.dentist||''}</td><td>${r.status||'Pending'}</td><td></td>`;
         const cell = tr.querySelector('td:last-child');
+        
         cell.appendChild(createActionButton('Confirm','btn-primary', async ()=>{
-          await db.collection('appointments').doc(r.id).update({status:'Confirmed', updatedAt: firebase.firestore.FieldValue.serverTimestamp()});
-          await refreshCounts(); loadRecentAppointments(); loadAllAppointments();
+          // First update the status to Confirmed
+          await db.collection('appointments').doc(r.id).update({
+            status:'Confirmed', 
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+          
+          // Then send reminder email
+          const emailSent = await sendAppointmentReminder(r);
+          if (emailSent) {
+            alert('Appointment confirmed and reminder email sent!');
+          } else {
+            alert('Appointment confirmed but failed to send reminder email.');
+          }
+          
+          await refreshCounts(); 
+          loadRecentAppointments(); 
+          loadAllAppointments();
         }));
+        
         cell.appendChild(createActionButton('Cancel','btn-ghost', async ()=>{
-          await db.collection('appointments').doc(r.id).update({status:'Cancelled', updatedAt: firebase.firestore.FieldValue.serverTimestamp()});
-          await refreshCounts(); loadRecentAppointments(); loadAllAppointments();
+          await db.collection('appointments').doc(r.id).update({
+            status:'Cancelled', 
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+          await refreshCounts(); 
+          loadRecentAppointments(); 
+          loadAllAppointments();
         }));
+        
         cell.appendChild(createActionButton('Delete','btn-danger', async ()=>{
-          if(confirm('Delete appointment?')){ await db.collection('appointments').doc(r.id).delete(); await refreshCounts(); loadRecentAppointments(); loadAllAppointments(); }
+          if(confirm('Delete appointment?')){ 
+            await db.collection('appointments').doc(r.id).delete(); 
+            await refreshCounts(); 
+            loadRecentAppointments(); 
+            loadAllAppointments(); 
+          }
         }));
+        
         tbody.appendChild(tr);
       });
     }
