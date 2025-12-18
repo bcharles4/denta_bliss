@@ -419,7 +419,7 @@ async function loadRecentAppointments(limit=8){
         tr.innerHTML = `
           <td>${r.date||''}</td>
           <td>${r.time||''}</td>
-          <td>${r.patientName||r.patientName||r.patient || '—'}</td>
+          <td>${r.patientName||r.patientName|| '—'}</td>
           <td>${r.service||''}</td>
           <td>${r.dentist||''}</td>
           <td><span class="${statusClass}">${r.status||'Pending'}</span></td>
