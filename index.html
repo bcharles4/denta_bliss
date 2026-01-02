@@ -32,7 +32,7 @@
     .card{background:var(--card);padding:14px;border-radius:12px;box-shadow:0 6px 18px rgba(16,24,40,0.06)}
     .card h3{margin:0 0 6px;font-size:13px;color:var(--muted)}
     .card .value{font-size:20px;font-weight:600}
-    /* Table */
+
     .table-wrap{background:var(--card);border-radius:12px;padding:14px;box-shadow:0 6px 18px rgba(16,24,40,0.06)}
     table{width:100%;border-collapse:collapse}
     th,td{padding:10px 8px;text-align:left;border-bottom:1px solid #eef2f7;font-size:14px}
@@ -90,6 +90,7 @@
     .phone-input-group{display:flex;gap:10px;margin-bottom:15px}
     .phone-input-group input:first-child{flex:0 0 80px}
     .phone-input-group input:last-child{flex:1}
+    .phone-input-group select{flex:0 0 100px}
     .test-sms-section{margin:30px 0;padding:20px;background:#f0f9ff;border-radius:8px;border:1px solid #bae6fd}
     /* responsive */
     @media (max-width:880px){
@@ -371,7 +372,7 @@ const firebaseConfig = {
 
 // Semaphore API Configuration
 const SEMAPHORE_API_KEY = "173c145eb2b7ed71c0f7e91fbfda9619";
-const SEMAPHORE_SENDER_NAME = "SEMAPHORE";
+const SEMAPHORE_SENDER_NAME = "Semaphore";
 const SEMAPHORE_API_URL = "https://api.semaphore.co/api/v4/priority";
 
 // CORS Proxy (for development/testing - you may need to request temporary access)
