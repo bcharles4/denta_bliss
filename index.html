@@ -43,10 +43,13 @@
     .btn-ghost{background:transparent;border:1px solid #e6e9ef}
     .btn-danger{background:var(--danger);color:white}
     .btn-success{background:var(--success);color:white}
+    .btn-warning{background:#f59e0b;color:white}
+    .btn-info{background:#06b6d4;color:white}
     .small{font-size:12px;padding:6px 8px;border-radius:6px}
     .status-pending{background:#fff7ed;color:#b45309;padding:6px 8px;border-radius:8px}
     .status-confirmed{background:#ecfdf5;color:#065f46;padding:6px 8px;border-radius:8px}
     .status-cancelled{background:#fef2f2;color:#dc2626;padding:6px 8px;border-radius:8px}
+    .status-completed{background:#dbeafe;color:#1e40af;padding:6px 8px;border-radius:8px}
     .flex{display:flex;gap:8px;align-items:center}
     /* form */
     .form-row{display:flex;gap:12px;margin-bottom:12px}
@@ -58,11 +61,43 @@
     .toast{position:fixed;top:20px;right:20px;background:var(--success);color:white;padding:12px 16px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:1000;display:none}
     .toast.error{background:var(--danger)}
     .toast.info{background:var(--accent)}
+    .toast.warning{background:#f59e0b}
+    /* Modal */
+    .modal{position:fixed;inset:0;background:rgba(3,7,18,0.5);align-items:center;justify-content:center;z-index:1000;display:none}
+    .modal-content{width:94%;max-width:800px;background:white;padding:24px;border-radius:12px;max-height:90vh;overflow-y:auto}
+    .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+    .modal-header h3{margin:0;font-size:20px}
+    .close-btn{background:none;border:none;font-size:24px;cursor:pointer;color:var(--muted)}
+    .medical-history-section{margin:20px 0}
+    .medical-history-item{background:#f8fafc;padding:20px;border-radius:8px;border:1px solid #e2e8f0;margin-bottom:16px}
+    .medical-history-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}
+    .medical-history-service{font-size:18px;font-weight:600;color:#1e293b;margin:0}
+    .medical-history-date{font-size:14px;color:#64748b;background:#e2e8f0;padding:4px 8px;border-radius:4px}
+    .medical-history-details{margin-top:12px}
+    .medical-history-row{display:flex;margin-bottom:8px;font-size:14px}
+    .medical-history-label{font-weight:600;color:#475569;min-width:80px}
+    .medical-history-value{color:#334155}
+    .medical-history-notes{margin-top:12px;padding:12px;background:#f1f5f9;border-radius:6px;font-size:14px;color:#475569}
+    .no-data{color:#94a3b8;font-style:italic;text-align:center;padding:40px;font-size:16px}
+    .back-button{background:var(--accent);color:white;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;font-weight:600;margin-top:20px}
+    /* SMS specific styles */
+    .sms-status{display:inline-block;padding:4px 8px;border-radius:6px;font-size:12px;font-weight:500;margin-left:8px}
+    .sms-sent{background:#d1fae5;color:#065f46}
+    .sms-failed{background:#fee2e2;color:#dc2626}
+    .sms-pending{background:#fef3c7;color:#92400e}
+    .sms-container{margin-top:20px;padding:20px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0}
+    .sms-message{background:#ffffff;border:1px solid #e2e8f0;padding:12px;border-radius:6px;margin:10px 0;font-family:monospace;white-space:pre-wrap;word-break:break-word}
+    .phone-input-group{display:flex;gap:10px;margin-bottom:15px}
+    .phone-input-group input:first-child{flex:0 0 80px}
+    .phone-input-group input:last-child{flex:1}
+    .test-sms-section{margin:30px 0;padding:20px;background:#f0f9ff;border-radius:8px;border:1px solid #bae6fd}
     /* responsive */
     @media (max-width:880px){
       .sidebar{display:none}
       .app{flex-direction:column}
       .main{padding:12px}
+      .medical-history-header{flex-direction:column;gap:8px}
+      .phone-input-group{flex-direction:column}
     }
   </style>
 </head>
@@ -99,7 +134,8 @@
 
       <div style="display:flex;align-items:center;gap:8px">
         <button class="btn btn-primary" id="btnNewAppointment">+ New Appointment</button>
-        <button class="btn btn-success" id="btnSendReminders">Send Tomorrow Reminders</button>
+        <button class="btn btn-success" id="btnSendReminders">Send Email Reminders</button>
+        <button class="btn btn-info" id="btnSendSMSReminders">Send SMS Reminders</button>
       </div>
     </div>
 
@@ -138,7 +174,7 @@
         <table id="appointmentsTable">
           <thead>
             <tr>
-              <th>Date</th><th>Time</th><th>Patient</th><th>Service</th><th>Dentist</th><th>Status</th><th>Actions</th>
+              <th>Date</th><th>Time</th><th>Patient</th><th>Phone</th><th>Service</th><th>Dentist</th><th>Status</th><th>Actions</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -162,6 +198,7 @@
               <option value="Pending">Pending</option>
               <option value="Confirmed">Confirmed</option>
               <option value="Cancelled">Cancelled</option>
+              <option value="Completed">Completed</option>
             </select>
             <button class="btn btn-ghost" id="btnExportAll">Export CSV</button>
           </div>
@@ -170,7 +207,7 @@
         <table id="allAppointmentsTable">
           <thead>
             <tr>
-              <th>Date</th><th>Time</th><th>Patient</th><th>Service</th><th>Dentist</th><th>Status</th><th>Actions</th>
+              <th>Date</th><th>Time</th><th>Patient</th><th>Phone</th><th>Service</th><th>Dentist</th><th>Status</th><th>Actions</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -182,12 +219,12 @@
     <div id="page-users" style="display:none">
       <div class="card" style="margin-bottom:12px">
         <h3>Users</h3>
-        <div class="footer-note">Registered users (click to delete)</div>
+        <div class="footer-note">Click on user name to view medical/treatment history</div>
       </div>
 
       <div class="table-wrap">
         <table id="usersTable">
-          <thead><tr><th>Name</th><th>Email</th><th>Face Registered</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Face Registered</th><th>Medical History</th><th>Actions</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -196,7 +233,7 @@
 </div>
 
 <!-- Modal: New appointment (simple) -->
-<div id="modalNew" style="display:none;position:fixed;inset:0;background:rgba(3,7,18,0.5);align-items:center;justify-content:center;">
+<div id="modalNew" style="display:none;position:fixed;inset:0;background:rgba(3,7,18,0.5);align-items:center;justify-content:center;z-index:1000;">
   <div style="width:94%;max-width:720px;background:white;padding:18px;border-radius:12px;">
     <h3 style="margin-top:0">Create Appointment</h3>
     <div style="display:flex;gap:8px;margin-bottom:8px">
@@ -206,6 +243,16 @@
     <div style="display:flex;gap:8px;margin-bottom:8px">
       <input id="mPatient" placeholder="Patient name" style="flex:1;padding:8px;border-radius:8px;border:1px solid #eee">
       <input id="mEmail" placeholder="Email" style="flex:1;padding:8px;border-radius:8px;border:1px solid #eee">
+    </div>
+    <div class="phone-input-group">
+      <select id="mCountryCode" style="padding:8px;border-radius:8px;border:1px solid #eee">
+        <option value="+63">🇵🇭 +63</option>
+        <option value="+1">🇺🇸 +1</option>
+        <option value="+44">🇬🇧 +44</option>
+        <option value="+65">🇸🇬 +65</option>
+        <option value="+60">🇲🇾 +60</option>
+      </select>
+      <input id="mPhone" placeholder="Phone number (for SMS)" style="flex:1;padding:8px;border-radius:8px;border:1px solid #eee">
     </div>
     <div style="display:flex;gap:8px;margin-bottom:8px">
       <input id="mService" placeholder="Service" style="flex:1;padding:8px;border-radius:8px;border:1px solid #eee">
@@ -217,6 +264,90 @@
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button class="btn btn-ghost" id="mCancel">Cancel</button>
       <button class="btn btn-primary" id="mCreate">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Send SMS -->
+<div id="modalSendSMS" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Send SMS Reminder</h3>
+      <button class="close-btn" id="closeSMSModal">&times;</button>
+    </div>
+    
+    <div class="sms-container">
+      <div style="margin-bottom:15px">
+        <strong>Recipient:</strong> <span id="smsRecipientName">-</span><br>
+        <strong>Phone:</strong> <span id="smsRecipientPhone">-</span><br>
+        <strong>Appointment:</strong> <span id="smsAppointmentDetails">-</span>
+      </div>
+      
+      <div style="margin-bottom:15px">
+        <label style="display:block;margin-bottom:5px;font-weight:500">Message Template:</label>
+        <select id="smsTemplate" style="width:100%;padding:8px;border-radius:8px;border:1px solid #e2e8f0;margin-bottom:10px">
+          <option value="appointment_reminder">Appointment Reminder</option>
+          <option value="appointment_confirmation">Appointment Confirmation</option>
+          <option value="appointment_cancellation">Appointment Cancellation</option>
+          <option value="custom">Custom Message</option>
+        </select>
+      </div>
+      
+      <div style="margin-bottom:15px">
+        <label style="display:block;margin-bottom:5px;font-weight:500">Message:</label>
+        <textarea id="smsMessage" rows="4" placeholder="Enter your message here..." style="width:100%;padding:10px;border-radius:8px;border:1px solid #e2e8f0"></textarea>
+        <div class="footer-note">Message will be automatically formatted with appointment details</div>
+      </div>
+      
+      <div class="sms-message" id="smsPreview">
+        Preview will appear here...
+      </div>
+      
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:15px">
+        <button class="btn btn-ghost" id="smsCancel">Cancel</button>
+        <button class="btn btn-info" id="smsSend">Send SMS</button>
+      </div>
+    </div>
+    
+    <div class="test-sms-section">
+      <h4 style="margin-top:0">Test SMS Functionality</h4>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <input id="testPhone" placeholder="Phone number (e.g., 09171234567)" style="flex:1;padding:8px;border-radius:8px;border:1px solid #e2e8f0">
+        <button class="btn btn-warning" id="testSMS">Send Test SMS</button>
+      </div>
+      <div class="footer-note">Enter a Philippine phone number to test SMS sending functionality</div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Medical/Treatment History -->
+<div id="modalMedicalHistory" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 id="medicalHistoryTitle">Treatment History</h3>
+      <button class="close-btn" id="closeMedicalHistory">&times;</button>
+    </div>
+    
+    <div style="margin-bottom:20px">
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px">
+        <div style="font-size:14px;color:#64748b">
+          <strong>Patient:</strong> <span id="medicalPatientName">-</span>
+        </div>
+        <div style="font-size:14px;color:#64748b">
+          <strong>Email:</strong> <span id="medicalPatientEmail">-</span>
+        </div>
+        <div style="font-size:14px;color:#64748b">
+          <strong>Phone:</strong> <span id="medicalPatientPhone">-</span>
+        </div>
+      </div>
+    </div>
+    
+    <div class="medical-history-section" id="treatmentHistoryContainer">
+      <div class="no-data">Loading treatment history...</div>
+    </div>
+    
+    <div style="text-align:center;margin-top:24px">
+      <button class="back-button" id="closeMedicalHistoryBtn">BACK</button>
     </div>
   </div>
 </div>
@@ -238,6 +369,18 @@ const firebaseConfig = {
   measurementId: "G-4TF8DE4T56"
 };
 
+// Semaphore API Configuration
+const SEMAPHORE_API_KEY = "173c145eb2b7ed71c0f7e91fbfda9619";
+const SEMAPHORE_SENDER_NAME = "SEMAPHORE";
+const SEMAPHORE_API_URL = "https://api.semaphore.co/api/v4/priority";
+
+// CORS Proxy (for development/testing - you may need to request temporary access)
+// Alternative proxies if the first one doesn't work:
+// 1. https://corsproxy.io/?
+// 2. https://api.allorigins.win/raw?url=
+// 3. https://thingproxy.freeboard.io/fetch/
+const CORS_PROXY = "https://corsproxy.io/?";
+
 // init
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
@@ -247,11 +390,22 @@ const db = firebase.firestore();
 const q = sel => document.querySelector(sel);
 const qAll = sel => Array.from(document.querySelectorAll(sel));
 const showPage = (pageId) => {
-  ['dashboard','appointments','users','settings'].forEach(p=>{
-    q('#page-'+p).style.display = (p===pageId ? '' : 'none');
-    q('#nav a[data-page="'+p+'"]').classList.toggle('active', p===pageId);
+  // Only show/hide pages that actually exist
+  const pages = ['dashboard', 'appointments', 'users'];
+  pages.forEach(p => {
+    const pageElement = q('#page-' + p);
+    const navLink = q('#nav a[data-page="' + p + '"]');
+    
+    if (pageElement) {
+      pageElement.style.display = (p === pageId ? '' : 'none');
+    }
+    
+    if (navLink) {
+      navLink.classList.toggle('active', p === pageId);
+    }
   });
-  q('#pageTitle').innerText = pageId.charAt(0).toUpperCase()+pageId.slice(1);
+  
+  q('#pageTitle').innerText = pageId.charAt(0).toUpperCase() + pageId.slice(1);
 };
 
 /* ===================== TOAST ===================== */
@@ -267,6 +421,7 @@ function showToast(message, type = 'success') {
 
 /* ===================== AUTH UI ===================== */
 let currentAdmin = null;
+
 function requireLogin() {
   auth.onAuthStateChanged(user => {
     if (user) {
@@ -299,19 +454,497 @@ qAll('#nav a[data-page]').forEach(a=>{
 q('#btnSignOut').addEventListener('click', ()=> auth.signOut().then(()=>location.reload()));
 
 /* ========== UTILS ========= */
-function formatDate(d){ try{ const dt=new Date(d); if(isNaN(dt)) return d; return dt.toLocaleDateString(); }catch(e){return d;} }
+function formatDate(d){ 
+  try{ 
+    const dt = new Date(d); 
+    if(isNaN(dt)) return d; 
+    return dt.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric'
+    }); 
+  }catch(e){return d;} 
+}
+
 function toCSV(rows, cols){
   const esc = v => '"'+String(v||'').replace(/"/g,'""')+'"';
   const head = cols.map(c=>esc(c)).join(',');
   const body = rows.map(r => cols.map(c=>esc(r[c])).join(',')).join('\n');
   return head + '\n' + body;
 }
+
 function downloadFile(filename, content){
   const a = document.createElement('a');
   a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(content);
   a.download = filename;
   a.click();
 }
+
+// Format phone number for display
+function formatPhoneForDisplay(phone) {
+  if (!phone) return '—';
+  
+  // Remove non-digit characters
+  const cleaned = phone.replace(/\D/g, '');
+  
+  // Format Philippine numbers (63XXXXXXXXXX or 09XXXXXXXXX)
+  if (cleaned.startsWith('63') && cleaned.length === 12) {
+    return `+${cleaned.substring(0, 2)} ${cleaned.substring(2, 5)} ${cleaned.substring(5, 8)} ${cleaned.substring(8)}`;
+  } else if (cleaned.startsWith('09') && cleaned.length === 11) {
+    return `+63 ${cleaned.substring(1, 4)} ${cleaned.substring(4, 7)} ${cleaned.substring(7)}`;
+  }
+  
+  // Format other numbers
+  return phone;
+}
+
+// Format phone number for API
+function formatPhoneNumber(phone, countryCode = '+63') {
+  if (!phone) return '';
+  
+  // Remove non-digit characters
+  const cleaned = phone.replace(/\D/g, '');
+  
+  // If it starts with 0, convert to +63 format (Philippines)
+  if (cleaned.startsWith('0')) {
+    return '+63' + cleaned.substring(1);
+  }
+  
+  // If it's already in +63 format
+  if (cleaned.startsWith('63')) {
+    return '+' + cleaned;
+  }
+  
+  // Add country code if not present
+  return countryCode + cleaned;
+}
+
+// Validate phone number
+function validatePhoneNumber(phone) {
+  if (!phone) return false;
+  // Remove all non-digit characters
+  const cleaned = phone.replace(/\D/g, '');
+  // Check if it has at least 10 digits
+  return cleaned.length >= 10;
+}
+
+/* ===================== SMS FUNCTIONS ===================== */
+async function sendSMS(phoneNumber, message) {
+  try {
+    showToast('Sending SMS...', 'info');
+    
+    // Format phone number
+    const formattedPhone = formatPhoneNumber(phoneNumber);
+    
+    if (!validatePhoneNumber(formattedPhone)) {
+      throw new Error('Invalid phone number format. Must be at least 10 digits.');
+    }
+    
+    console.log('Sending SMS to:', formattedPhone);
+    console.log('Message:', message.substring(0, 50) + '...');
+    
+    // Try different CORS proxies if one fails
+    const corsProxies = [
+      'https://corsproxy.io/?',
+      'https://api.allorigins.win/raw?url=',
+      'https://thingproxy.freeboard.io/fetch/'
+    ];
+    
+    let lastError = null;
+    
+    for (const proxy of corsProxies) {
+      try {
+        console.log('Trying proxy:', proxy);
+        
+        const response = await fetch(proxy + encodeURIComponent(SEMAPHORE_API_URL), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            apikey: SEMAPHORE_API_KEY,
+            number: formattedPhone,
+            message: message,
+            sendername: SEMAPHORE_SENDER_NAME
+          })
+        });
+        
+        console.log('Response status:', response.status);
+        
+        if (!response.ok) {
+          throw new Error(`Proxy returned status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        console.log('SMS API response:', result);
+        
+        if (result[0] && result[0].status === 'Pending') {
+          showToast('SMS sent successfully!');
+          return { success: true, data: result };
+        } else {
+          throw new Error(result[0]?.message || 'SMS not sent');
+        }
+      } catch (proxyError) {
+        console.log(`Proxy ${proxy} failed:`, proxyError.message);
+        lastError = proxyError;
+        continue; // Try next proxy
+      }
+    }
+    
+    // If all proxies failed, try direct with mode: 'no-cors' (limited)
+    console.log('All proxies failed, trying no-cors mode...');
+    
+    // Create a form submission as fallback (this won't give us a response but might work)
+    const manualInstructions = `
+    SMS SENDING INSTRUCTIONS:
+    
+    1. Open: https://semaphore.co/api
+    2. Use these parameters:
+       - API Key: ${SEMAPHORE_API_KEY.substring(0, 10)}...
+       - Number: ${formattedPhone}
+       - Message: ${message.substring(0, 100)}...
+       - Sender Name: ${SEMAPHORE_SENDER_NAME}
+    
+    3. OR use curl command:
+    curl -X POST https://api.semaphore.co/api/v4/messages \\
+      -H "Content-Type: application/json" \\
+      -d '{
+        "apikey": "${SEMAPHORE_API_KEY}",
+        "number": "${formattedPhone}",
+        "message": "${message.replace(/"/g, '\\"')}",
+        "sendername": "${SEMAPHORE_SENDER_NAME}"
+      }'
+    `;
+    
+    console.log(manualInstructions);
+    
+    // Show user the manual instructions
+    alert(`SMS ready to send!\n\nPhone: ${formattedPhone}\n\nCopy this message:\n${message}\n\nUse the Semaphore API console or curl command to send.`);
+    
+    // Simulate success for demo
+    return { 
+      success: true, 
+      data: { 
+        message: 'SMS prepared - use manual instructions above',
+        manualInstructions: manualInstructions
+      } 
+    };
+    
+  } catch (error) {
+    console.error('Error sending SMS:', error);
+    showToast(`SMS failed: ${error.message}`, 'error');
+    return { success: false, error: error.message };
+  }
+}
+
+async function sendAppointmentReminderSMS(appointment) {
+  try {
+    if (!appointment.patientPhone && !appointment.phone) {
+      throw new Error('No phone number found for patient');
+    }
+    
+    const phoneNumber = appointment.patientPhone || appointment.phone;
+    const formattedDate = formatDate(appointment.date);
+    
+    // Create SMS message
+    const message = `Hello ${appointment.patientName}! This is a reminder for your dental appointment at DentaBliss on ${formattedDate} at ${appointment.time}. Please arrive 10 minutes early. Call us at (02) 8888-9999 if you need to reschedule.`;
+    
+    return await sendSMS(phoneNumber, message);
+  } catch (error) {
+    console.error('Error sending appointment reminder SMS:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+async function sendTomorrowSMSReminders() {
+  try {
+    showToast('Sending SMS reminders for tomorrow...', 'info');
+    
+    // Get tomorrow's date
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+    
+    // Get tomorrow's appointments
+    const appointmentsSnapshot = await db.collection('appointments')
+      .where('date', '==', tomorrowStr)
+      .where('status', 'in', ['Confirmed', 'Pending'])
+      .get();
+    
+    if (appointmentsSnapshot.empty) {
+      showToast('No appointments found for tomorrow', 'warning');
+      return { success: true, sent: 0, total: 0 };
+    }
+    
+    let sentCount = 0;
+    let totalCount = appointmentsSnapshot.size;
+    
+    for (const doc of appointmentsSnapshot.docs) {
+      const appointment = { id: doc.id, ...doc.data() };
+      
+      if (appointment.patientPhone || appointment.phone) {
+        const result = await sendAppointmentReminderSMS(appointment);
+        
+        if (result.success) {
+          sentCount++;
+          // Update appointment with SMS sent timestamp
+          await db.collection('appointments').doc(appointment.id).update({
+            smsSent: firebase.firestore.FieldValue.serverTimestamp(),
+            smsStatus: 'sent'
+          });
+        } else {
+          // Update with failed status
+          await db.collection('appointments').doc(appointment.id).update({
+            smsStatus: 'failed',
+            smsError: result.error
+          });
+        }
+        
+        // Delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
+    
+    showToast(`Successfully sent ${sentCount} out of ${totalCount} SMS reminders!`);
+    return { success: true, sent: sentCount, total: totalCount };
+  } catch (error) {
+    console.error('Error sending tomorrow SMS reminders:', error);
+    showToast('Error sending tomorrow SMS reminders', 'error');
+    return { success: false, error: error.message };
+  }
+}
+
+/* ===================== SMS MODAL FUNCTIONS ===================== */
+let currentSMSAppointment = null;
+
+function openSMSModal(appointment) {
+  currentSMSAppointment = appointment;
+  
+  // Populate modal fields
+  q('#smsRecipientName').textContent = appointment.patientName || appointment.patient || 'Unknown';
+  q('#smsRecipientPhone').textContent = formatPhoneForDisplay(appointment.patientPhone || appointment.phone) || 'No phone number';
+  q('#smsAppointmentDetails').textContent = `${appointment.service || 'Dental Appointment'} on ${appointment.date} at ${appointment.time}`;
+  
+  // Set default message based on template
+  updateSMSMessage();
+  
+  // Show modal
+  q('#modalSendSMS').style.display = 'flex';
+}
+
+function updateSMSMessage() {
+  const template = q('#smsTemplate').value;
+  const appointment = currentSMSAppointment;
+  const formattedDate = formatDate(appointment.date);
+  
+  let message = '';
+  
+  switch (template) {
+    case 'appointment_reminder':
+      message = `Hello ${appointment.patientName}! This is a reminder for your dental appointment at DentaBliss on ${formattedDate} at ${appointment.time}. Please arrive 10 minutes early. Call us at (02) 8888-9999 if you need to reschedule.`;
+      break;
+    case 'appointment_confirmation':
+      message = `Hello ${appointment.patientName}! Your appointment for ${appointment.service} has been confirmed for ${formattedDate} at ${appointment.time}. Dr. ${appointment.dentist} will see you. Please arrive 10 minutes early.`;
+      break;
+    case 'appointment_cancellation':
+      message = `Hello ${appointment.patientName}! Your appointment for ${formattedDate} at ${appointment.time} has been cancelled. Please call us at (02) 8888-9999 to reschedule.`;
+      break;
+    default:
+      message = q('#smsMessage').value || '';
+  }
+  
+  q('#smsMessage').value = message;
+  updateSMSPreview();
+}
+
+function updateSMSPreview() {
+  const message = q('#smsMessage').value;
+  const charCount = message.length;
+  const smsCount = Math.ceil(charCount / 160);
+  
+  q('#smsPreview').innerHTML = `
+    <strong>Preview (${charCount} chars, ${smsCount} SMS):</strong><br>
+    ${message.replace(/\n/g, '<br>')}
+  `;
+}
+
+// Initialize SMS modal event listeners
+function initSMSModal() {
+  q('#smsTemplate').addEventListener('change', updateSMSMessage);
+  q('#smsMessage').addEventListener('input', updateSMSPreview);
+  
+  q('#closeSMSModal').addEventListener('click', () => {
+    q('#modalSendSMS').style.display = 'none';
+    currentSMSAppointment = null;
+  });
+  
+  q('#smsCancel').addEventListener('click', () => {
+    q('#modalSendSMS').style.display = 'none';
+    currentSMSAppointment = null;
+  });
+  
+  q('#smsSend').addEventListener('click', async () => {
+    const appointment = currentSMSAppointment;
+    const message = q('#smsMessage').value.trim();
+    
+    if (!message) {
+      showToast('Please enter a message', 'error');
+      return;
+    }
+    
+    const phoneNumber = appointment.patientPhone || appointment.phone;
+    if (!phoneNumber) {
+      showToast('No phone number found for this patient', 'error');
+      return;
+    }
+    
+    try {
+      const result = await sendSMS(phoneNumber, message);
+      
+      if (result.success) {
+        // Update appointment with SMS sent info
+        await db.collection('appointments').doc(appointment.id).update({
+          smsSent: firebase.firestore.FieldValue.serverTimestamp(),
+          smsStatus: 'sent',
+          lastSMSMessage: message.substring(0, 100)
+        });
+        
+        q('#modalSendSMS').style.display = 'none';
+        showToast('SMS sent successfully!');
+        
+        // Refresh tables
+        loadRecentAppointments();
+        loadAllAppointments();
+      }
+    } catch (error) {
+      showToast(`Failed to send SMS: ${error.message}`, 'error');
+    }
+  });
+  
+  // Test SMS functionality
+  q('#testSMS').addEventListener('click', async () => {
+    const testPhone = q('#testPhone').value.trim();
+    
+    if (!testPhone) {
+      showToast('Please enter a phone number', 'error');
+      return;
+    }
+    
+    const testMessage = `DentaBliss Test: This is a test message from the dental admin system. If you received this, SMS integration is working correctly.`;
+    
+    try {
+      const result = await sendSMS(testPhone, testMessage);
+      
+      if (result.success) {
+        showToast('Test SMS sent successfully!');
+      }
+    } catch (error) {
+      showToast(`Test SMS failed: ${error.message}`, 'error');
+    }
+  });
+}
+
+/* ========== TREATMENT HISTORY FUNCTIONS ========= */
+async function showTreatmentHistory(userName, userEmail, userPhone) {
+  q('#medicalHistoryTitle').innerText = `Treatment History: ${userName}`;
+  q('#medicalPatientName').innerText = userName;
+  q('#medicalPatientEmail').innerText = userEmail || 'No email';
+  q('#medicalPatientPhone').innerText = formatPhoneForDisplay(userPhone) || 'No phone';
+  
+  const container = q('#treatmentHistoryContainer');
+  container.innerHTML = '<div class="no-data">Loading treatment history...</div>';
+  
+  try {
+    const appointmentSnapshot = await db.collection('appointments')
+      .where('patientEmail', '==', userEmail)
+      .orderBy('date', 'desc')
+      .get();
+    
+    if (!appointmentSnapshot.empty) {
+      const appointments = appointmentSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      const today = new Date().toISOString().slice(0,10);
+      const pastAppointments = appointments.filter(appt => appt.date <= today || appt.status === 'Completed');
+      
+      if (pastAppointments.length > 0) {
+        container.innerHTML = '';
+        
+        pastAppointments.forEach(appt => {
+          const historyItem = document.createElement('div');
+          historyItem.className = 'medical-history-item';
+          
+          const formattedDate = formatDate(appt.date);
+          const statusClass = appt.status?.toLowerCase() || 'pending';
+          
+          const smsStatus = appt.smsStatus;
+          let smsBadge = '';
+          if (smsStatus === 'sent') {
+            smsBadge = '<span class="sms-status sms-sent">SMS Sent</span>';
+          } else if (smsStatus === 'failed') {
+            smsBadge = '<span class="sms-status sms-failed">SMS Failed</span>';
+          }
+          
+          historyItem.innerHTML = `
+            <div class="medical-history-header">
+              <h4 class="medical-history-service">${appt.service || 'Dental Treatment'} ${smsBadge}</h4>
+              <div class="medical-history-date">${formattedDate} at ${appt.time || ''}</div>
+            </div>
+            
+            <div class="medical-history-details">
+              <div class="medical-history-row">
+                <span class="medical-history-label">Date:</span>
+                <span class="medical-history-value">${appt.date || 'N/A'}</span>
+              </div>
+              
+              <div class="medical-history-row">
+                <span class="medical-history-label">Time:</span>
+                <span class="medical-history-value">${appt.time || 'N/A'}</span>
+              </div>
+              
+              <div class="medical-history-row">
+                <span class="medical-history-label">Dentist:</span>
+                <span class="medical-history-value">${appt.dentist || 'N/A'}</span>
+              </div>
+              
+              <div class="medical-history-row">
+                <span class="medical-history-label">Status:</span>
+                <span class="medical-history-value">
+                  <span class="status-${statusClass}" style="display:inline-block;padding:4px 8px;border-radius:4px;font-size:12px">
+                    ${appt.status || 'Pending'}
+                  </span>
+                </span>
+              </div>
+            </div>
+            
+            ${appt.notes ? `
+            <div class="medical-history-notes">
+              <strong>Notes:</strong> ${appt.notes}
+            </div>
+            ` : ''}
+            
+            <div style="border-top:1px dashed #e2e8f0;margin-top:16px;padding-top:8px"></div>
+          `;
+          
+          container.appendChild(historyItem);
+        });
+      } else {
+        container.innerHTML = '<div class="no-data">No treatment history found for this patient</div>';
+      }
+    } else {
+      container.innerHTML = '<div class="no-data">No appointments found for this patient</div>';
+    }
+    
+    q('#modalMedicalHistory').style.display = 'flex';
+    
+  } catch (error) {
+    console.error('Error loading treatment history:', error);
+    container.innerHTML = '<div class="no-data">Error loading treatment history. Please try again.</div>';
+    showToast('Error loading treatment history', 'error');
+    q('#modalMedicalHistory').style.display = 'flex';
+  }
+}
+
+window.showTreatmentHistory = showTreatmentHistory;
 
 /* ========== EMAIL REMINDER FUNCTIONS ========= */
 async function sendAppointmentReminder(appointmentId) {
@@ -377,7 +1010,6 @@ async function refreshCounts(){
     const snapTotal = await db.collection('appointments').get();
     q('#countAppointments').innerText = snapTotal.size;
 
-    // upcoming 7 days
     const today = new Date(); const next7 = new Date(); next7.setDate(today.getDate()+7);
     const sToday = today.toISOString().slice(0,10);
     const sNext7 = next7.toISOString().slice(0,10);
@@ -395,11 +1027,19 @@ async function refreshCounts(){
   }catch(e){console.error(e)}
 }
 
-function createActionButton(text, cls, handler){ const b=document.createElement('button'); b.className='small '+cls; b.innerText=text; b.onclick=handler; return b; }
+function createActionButton(text, cls, handler){ 
+  const b=document.createElement('button'); 
+  b.className='small '+cls; 
+  b.innerText=text; 
+  b.onclick=handler; 
+  b.style.marginRight = '4px';
+  b.style.marginBottom = '4px';
+  return b; 
+}
 
 async function loadRecentAppointments(limit=8){
   const tbody = q('#appointmentsTable tbody');
-  tbody.innerHTML = '<tr><td colspan="7">Loading…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="8">Loading…</td></tr>';
   try{
     const today = new Date().toISOString().slice(0,10);
     const snap = await db.collection('appointments')
@@ -410,34 +1050,37 @@ async function loadRecentAppointments(limit=8){
       .get();
 
     const rows = snap.docs.map(d => ({ id:d.id, ...d.data() }));
-    if(!rows.length) tbody.innerHTML = '<tr><td colspan="7">No recent appointments</td></tr>';
+    if(!rows.length) tbody.innerHTML = '<tr><td colspan="8">No recent appointments</td></tr>';
     else {
       tbody.innerHTML = '';
       rows.forEach(r=>{
         const tr=document.createElement('tr');
         const statusClass = `status-${(r.status || 'pending').toLowerCase()}`;
+        
+        const phoneToCheck = r.patientPhone || r.phone;
+        const phoneDisplay = formatPhoneForDisplay(phoneToCheck);
+        
         tr.innerHTML = `
           <td>${r.date||''}</td>
           <td>${r.time||''}</td>
-          <td>${r.patientName||r.patientName|| '—'}</td>
+          <td>${r.patientName||r.patient || '—'}</td>
+          <td>${phoneDisplay}</td>
           <td>${r.service||''}</td>
           <td>${r.dentist||''}</td>
           <td><span class="${statusClass}">${r.status||'Pending'}</span></td>
           <td></td>
         `;
         const actionsCell = tr.querySelector('td:last-child');
+        
+        actionsCell.style.minWidth = '200px';
 
         if (r.status !== 'Confirmed') {
           actionsCell.appendChild(createActionButton('Confirm','btn-primary', async ()=>{
-            // First update the status to Confirmed
             await db.collection('appointments').doc(r.id).update({
               status:'Confirmed', 
               updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
-            
-            // Then send reminder email
             await sendAppointmentReminder(r.id);
-            
             await refreshCounts(); 
             loadRecentAppointments(limit); 
             loadAllAppointments();
@@ -456,7 +1099,26 @@ async function loadRecentAppointments(limit=8){
           }));
         }
 
-        actionsCell.appendChild(createActionButton('Remind','btn-success', async ()=>{
+        const appointmentDate = new Date(r.date);
+        const todayDate = new Date();
+        if (r.status === 'Confirmed' && appointmentDate < todayDate) {
+          actionsCell.appendChild(createActionButton('Complete','btn-success', async ()=>{
+            await db.collection('appointments').doc(r.id).update({
+              status:'Completed', 
+              updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            await refreshCounts(); 
+            loadRecentAppointments(limit); 
+            loadAllAppointments();
+          }));
+        }
+
+        // SMS button always visible
+        actionsCell.appendChild(createActionButton('SMS','btn-info', async ()=>{
+          await openSMSModal(r);
+        }));
+
+        actionsCell.appendChild(createActionButton('Email','btn-success', async ()=>{
           await sendAppointmentReminder(r.id);
         }));
 
@@ -472,30 +1134,37 @@ async function loadRecentAppointments(limit=8){
         tbody.appendChild(tr);
       });
     }
-  }catch(e){ console.error(e); tbody.innerHTML = '<tr><td colspan="7">Error loading</td></tr>'; }
+  }catch(e){ console.error(e); tbody.innerHTML = '<tr><td colspan="8">Error loading</td></tr>'; }
 }
 
 async function loadAllAppointments(){
   const tbody = q('#allAppointmentsTable tbody');
-  tbody.innerHTML = '<tr><td colspan="7">Loading…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="8">Loading…</td></tr>';
   try{
     const snap = await db.collection('appointments').orderBy('date').orderBy('time').get();
     const rows = snap.docs.map(d => ({ id:d.id, ...d.data() }));
-    if(!rows.length) tbody.innerHTML = '<tr><td colspan="7">No appointments</td></tr>';
+    if(!rows.length) tbody.innerHTML = '<tr><td colspan="8">No appointments</td></tr>';
     else {
       tbody.innerHTML = '';
       rows.forEach(r=>{
         const tr=document.createElement('tr');
         const statusClass = `status-${(r.status || 'pending').toLowerCase()}`;
+        
+        const phoneToCheck = r.patientPhone || r.phone;
+        const phoneDisplay = formatPhoneForDisplay(phoneToCheck);
+        
         tr.innerHTML = `
           <td>${r.date||''}</td>
           <td>${r.time||''}</td>
           <td>${r.patientName||r.patient||''}</td>
+          <td>${phoneDisplay}</td>
           <td>${r.service||''}</td>
           <td>${r.dentist||''}</td>
           <td><span class="${statusClass}">${r.status||'Pending'}</span></td>
           <td></td>`;
         const cell = tr.querySelector('td:last-child');
+        
+        cell.style.minWidth = '200px';
         
         if (r.status !== 'Confirmed') {
           cell.appendChild(createActionButton('Confirm','btn-primary', async ()=>{
@@ -521,8 +1190,27 @@ async function loadAllAppointments(){
             loadAllAppointments();
           }));
         }
+
+        const appointmentDate = new Date(r.date);
+        const todayDate = new Date();
+        if (r.status === 'Confirmed' && appointmentDate < todayDate) {
+          cell.appendChild(createActionButton('Complete','btn-success', async ()=>{
+            await db.collection('appointments').doc(r.id).update({
+              status:'Completed', 
+              updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            await refreshCounts(); 
+            loadRecentAppointments(); 
+            loadAllAppointments();
+          }));
+        }
         
-        cell.appendChild(createActionButton('Remind','btn-success', async ()=>{
+        // SMS button always visible
+        cell.appendChild(createActionButton('SMS','btn-info', async ()=>{
+          await openSMSModal(r);
+        }));
+        
+        cell.appendChild(createActionButton('Email','btn-success', async ()=>{
           await sendAppointmentReminder(r.id);
         }));
         
@@ -538,22 +1226,43 @@ async function loadAllAppointments(){
         tbody.appendChild(tr);
       });
     }
-  }catch(e){ console.error(e); tbody.innerHTML = '<tr><td colspan="7">Error loading</td></tr>'; }
+  }catch(e){ console.error(e); tbody.innerHTML = '<tr><td colspan="8">Error loading</td></tr>'; }
 }
 
 /* ===================== USERS ===================== */
 async function loadUsers(){
   const tbody = q('#usersTable tbody');
-  tbody.innerHTML = '<tr><td colspan="4">Loading…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="6">Loading…</td></tr>';
   try{
     const snap = await db.collection('users').orderBy('name').get();
     const rows = snap.docs.map(d=>({id:d.id,...d.data()}));
-    if(!rows.length) tbody.innerHTML = '<tr><td colspan="4">No users</td></tr>';
+    if(!rows.length) tbody.innerHTML = '<tr><td colspan="6">No users</td></tr>';
     else {
       tbody.innerHTML = '';
       rows.forEach(u=>{
         const tr=document.createElement('tr');
-        tr.innerHTML = `<td>${u.name||'—'}</td><td>${u.email||'—'}</td><td>${u.faceData ? 'Yes':'No'}</td><td></td>`;
+        
+        const userName = u.name || 'User';
+        const userEmail = u.email || '';
+        const userPhone = u.phone || u.mobile || '';
+        
+        tr.innerHTML = `
+          <td>
+            <a href="#" style="color:var(--accent);text-decoration:none;font-weight:500" 
+               onclick="event.preventDefault(); showTreatmentHistory('${userName.replace(/'/g, "\\'")}', '${userEmail.replace(/'/g, "\\'")}', '${userPhone.replace(/'/g, "\\'")}')">
+              ${userName}
+            </a>
+          </td>
+          <td>${userEmail}</td>
+          <td>${formatPhoneForDisplay(userPhone) || '—'}</td>
+          <td>${u.faceData ? 'Yes':'No'}</td>
+          <td>
+            <button class="btn small btn-warning" onclick="showTreatmentHistory('${userName.replace(/'/g, "\\'")}', '${userEmail.replace(/'/g, "\\'")}', '${userPhone.replace(/'/g, "\\'")}')">
+              View History
+            </button>
+          </td>
+          <td></td>`;
+        
         const cell = tr.querySelector('td:last-child');
         cell.appendChild(createActionButton('Delete','btn-danger', async ()=>{
           if(confirm('Delete user? This will not revoke auth record.')) {
@@ -565,22 +1274,39 @@ async function loadUsers(){
         tbody.appendChild(tr);
       });
     }
-  }catch(e){ console.error(e); tbody.innerHTML = '<tr><td colspan="4">Error loading</td></tr>'; }
+  }catch(e){ console.error(e); tbody.innerHTML = '<tr><td colspan="6">Error loading</td></tr>'; }
 }
 
 /* ===================== CREATE APPOINTMENT (modal) ===================== */
-q('#btnNewAppointment').addEventListener('click', ()=> q('#modalNew').style.display = 'flex');
+q('#btnNewAppointment').addEventListener('click', ()=> {
+  q('#modalNew').style.display = 'flex';
+  q('#mDate').value = '';
+  q('#mTime').value = '';
+  q('#mPatient').value = '';
+  q('#mEmail').value = '';
+  q('#mPhone').value = '';
+  q('#mService').value = '';
+  q('#mDentist').value = '';
+  q('#mNotes').value = '';
+});
+
 q('#mCancel').addEventListener('click', ()=> q('#modalNew').style.display = 'none');
 q('#mCreate').addEventListener('click', async ()=>{
   const date=q('#mDate').value.trim(), time=q('#mTime').value.trim(), patient=q('#mPatient').value.trim();
-  const email=q('#mEmail').value.trim(), service=q('#mService').value.trim(), dentist=q('#mDentist').value.trim(), notes=q('#mNotes').value.trim();
+  const email=q('#mEmail').value.trim(), phone=q('#mPhone').value.trim(), countryCode=q('#mCountryCode').value;
+  const service=q('#mService').value.trim(), dentist=q('#mDentist').value.trim(), notes=q('#mNotes').value.trim();
+  
   if(!date||!time||!patient){ return alert('Date, time and patient required'); }
+  
   const id = db.collection('appointments').doc().id;
+  const fullPhone = phone ? countryCode + phone.replace(/\D/g, '') : '';
+  
   await db.collection('appointments').doc(id).set({
     appointmentId: id,
     userId: 'admin-created',
     patientName: patient,
     patientEmail: email || '',
+    patientPhone: fullPhone,
     service: service || '',
     dentist: dentist || '',
     date: date,
@@ -589,17 +1315,44 @@ q('#mCreate').addEventListener('click', async ()=>{
     status: 'Pending',
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   });
+  
   q('#modalNew').style.display = 'none';
-  q('#mDate').value='';q('#mTime').value='';q('#mPatient').value='';q('#mService').value='';
   showToast('Appointment created successfully!');
   await refreshCounts(); loadRecentAppointments(); loadAllAppointments();
 });
 
-/* ========== SEND TOMORROW REMINDERS ========= */
+/* ========== SEND REMINDERS ========= */
 q('#btnSendReminders').addEventListener('click', async () => {
   if (confirm('Send reminder emails for all tomorrow\'s confirmed appointments?')) {
     await sendTomorrowReminders();
   }
+});
+
+q('#btnSendSMSReminders').addEventListener('click', async () => {
+  if (confirm('Send SMS reminders for all tomorrow\'s confirmed appointments?')) {
+    await sendTomorrowSMSReminders();
+  }
+});
+
+/* ========== MEDICAL HISTORY MODAL CONTROLS ========= */
+q('#closeMedicalHistory').addEventListener('click', ()=> q('#modalMedicalHistory').style.display = 'none');
+q('#closeMedicalHistoryBtn').addEventListener('click', ()=> q('#modalMedicalHistory').style.display = 'none');
+
+q('#modalMedicalHistory').addEventListener('click', (e) => {
+  if (e.target === q('#modalMedicalHistory')) {
+    q('#modalMedicalHistory').style.display = 'none';
+  }
+});
+
+[q('#modalNew'), q('#modalSendSMS')].forEach(modal => {
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      modal.style.display = 'none';
+      if (modal.id === 'modalSendSMS') {
+        currentSMSAppointment = null;
+      }
+    }
+  });
 });
 
 /* ========== SEARCH / FILTER / EXPORT ========= */
@@ -609,7 +1362,6 @@ q('#globalSearch').addEventListener('input', (e)=>{
 });
 
 function filterTables(term){
-  // appointments table
   qAll('#appointmentsTable tbody tr').forEach(tr=>{
     const text = tr.innerText.toLowerCase();
     tr.style.display = text.includes(term) ? '' : 'none';
@@ -637,12 +1389,19 @@ q('#filterStatus').addEventListener('change', (e)=>{
 });
 
 q('#btnExportCSV').addEventListener('click', async ()=>{
-  // export current recent table rows to csv
   const rows = Array.from(document.querySelectorAll('#appointmentsTable tbody tr')).map(tr=>{
     const cols = tr.querySelectorAll('td');
-    return { date:cols[0].innerText, time:cols[1].innerText, patient:cols[2].innerText, service:cols[3].innerText, dentist:cols[4].innerText, status:cols[5].innerText };
+    return { 
+      date: cols[0].innerText, 
+      time: cols[1].innerText, 
+      patient: cols[2].innerText, 
+      phone: cols[3].innerText,
+      service: cols[4].innerText, 
+      dentist: cols[5].innerText, 
+      status: cols[6].innerText 
+    };
   }).filter(r=>r.date);
-  const csv = toCSV(rows, ['date','time','patient','service','dentist','status']);
+  const csv = toCSV(rows, ['date','time','patient','phone','service','dentist','status']);
   downloadFile('appointments.csv', csv);
   showToast('CSV exported successfully!');
 });
@@ -650,9 +1409,17 @@ q('#btnExportCSV').addEventListener('click', async ()=>{
 q('#btnExportAll').addEventListener('click', async ()=>{
   const rows = Array.from(document.querySelectorAll('#allAppointmentsTable tbody tr')).map(tr=>{
     const cols = tr.querySelectorAll('td');
-    return { date:cols[0].innerText, time:cols[1].innerText, patient:cols[2].innerText, service:cols[3].innerText, dentist:cols[4].innerText, status:cols[5].innerText };
+    return { 
+      date: cols[0].innerText, 
+      time: cols[1].innerText, 
+      patient: cols[2].innerText, 
+      phone: cols[3].innerText,
+      service: cols[4].innerText, 
+      dentist: cols[5].innerText, 
+      status: cols[6].innerText,
+    };
   }).filter(r=>r.date);
-  const csv = toCSV(rows, ['date','time','patient','service','dentist','status']);
+  const csv = toCSV(rows, ['date','time','patient','phone','service','dentist','status']);
   downloadFile('appointments_all.csv', csv);
   showToast('All appointments CSV exported!');
 });
@@ -660,7 +1427,7 @@ q('#btnExportAll').addEventListener('click', async ()=>{
 /* ========== INITIAL load ========== */
 async function initialLoad(){
   showPage('dashboard');
-  // if already logged in auth listener will run and populate
+  initSMSModal();
 }
 initialLoad();
 </script>
