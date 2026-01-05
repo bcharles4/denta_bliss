@@ -71,3 +71,7 @@ node_modules/
 
 # Firebase Cloud Functions directory
 functions/
+
+# Firebase configuration files
+.firebaserc
+firebase.json
