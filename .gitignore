@@ -69,4 +69,5 @@ node_modules/
 .dataconnect
 
 
-.functions
+# Firebase Cloud Functions directory
+functions/
