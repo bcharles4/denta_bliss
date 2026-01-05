@@ -1,8 +1,0 @@
-node_modules/
-*.local
-.env
-.firebase/
-*.log
-.DS_Store
-functions
-index.js
