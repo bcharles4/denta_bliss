@@ -234,9 +234,12 @@
 </div>
 
 <!-- Modal: New appointment (simple) -->
-<div id="modalNew" style="display:none;position:fixed;inset:0;background:rgba(3,7,18,0.5);align-items:center;justify-content:center;z-index:1000;">
-  <div style="width:94%;max-width:720px;background:white;padding:18px;border-radius:12px;">
-    <h3 style="margin-top:0">Create Appointment</h3>
+<div id="modalNew" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Create Appointment</h3>
+      <button class="close-btn" id="mCancel">&times;</button>
+    </div>
     <div style="display:flex;gap:8px;margin-bottom:8px">
       <input id="mDate" placeholder="YYYY-MM-DD" style="flex:1;padding:8px;border-radius:8px;border:1px solid #eee">
       <input id="mTime" placeholder="10:00 AM" style="flex:1;padding:8px;border-radius:8px;border:1px solid #eee">
@@ -263,7 +266,7 @@
       <textarea id="mNotes" placeholder="Notes..." style="flex:1;padding:8px;border-radius:8px;border:1px solid #eee"></textarea>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end">
-      <button class="btn btn-ghost" id="mCancel">Cancel</button>
+      <button class="btn btn-ghost" id="mCancelBtn">Cancel</button>
       <button class="btn btn-primary" id="mCreate">Create</button>
     </div>
   </div>
@@ -370,19 +373,16 @@ const firebaseConfig = {
   measurementId: "G-4TF8DE4T56"
 };
 
-// Semaphore API Configuration
+// Semaphore API Configuration (for manual fallback)
 const SEMAPHORE_API_KEY = "173c145eb2b7ed71c0f7e91fbfda9619";
 const SEMAPHORE_SENDER_NAME = "Semaphore";
-const SEMAPHORE_API_URL = "https://api.semaphore.co/api/v4/messages";
 
-// CORS Proxy (for development/testing - you may need to request temporary access)
-// Alternative proxies if the first one doesn't work:
-// 1. https://corsproxy.io/?
-// 2. https://api.allorigins.win/raw?url=
-// 3. https://thingproxy.freeboard.io/fetch/
-const CORS_PROXY = "https://corsproxy.io/?";
+// Cloud Function URLs
+const CLOUD_FUNCTION_SEND_SMS = "https://us-central1-dentabliss.cloudfunctions.net/sendAppointmentSMS";
+const CLOUD_FUNCTION_TOMORROW_REMINDERS = "https://us-central1-dentabliss.cloudfunctions.net/sendTomorrowReminders";
+const CLOUD_FUNCTION_APPOINTMENT_REMINDER = "https://us-central1-dentabliss.cloudfunctions.net/sendAppointmentReminder";
 
-// init
+// Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
@@ -390,34 +390,34 @@ const db = firebase.firestore();
 /* ===================== UI HELPERS ===================== */
 const q = sel => document.querySelector(sel);
 const qAll = sel => Array.from(document.querySelectorAll(sel));
-const showPage = (pageId) => {
-  // Only show/hide pages that actually exist
+
+function showPage(pageId) {
   const pages = ['dashboard', 'appointments', 'users'];
   pages.forEach(p => {
     const pageElement = q('#page-' + p);
     const navLink = q('#nav a[data-page="' + p + '"]');
     
-    if (pageElement) {
-      pageElement.style.display = (p === pageId ? '' : 'none');
-    }
-    
-    if (navLink) {
-      navLink.classList.toggle('active', p === pageId);
-    }
+    if (pageElement) pageElement.style.display = (p === pageId ? '' : 'none');
+    if (navLink) navLink.classList.toggle('active', p === pageId);
   });
   
   q('#pageTitle').innerText = pageId.charAt(0).toUpperCase() + pageId.slice(1);
-};
+}
 
-/* ===================== TOAST ===================== */
 function showToast(message, type = 'success') {
   const toast = q('#toast');
   toast.innerText = message;
   toast.className = `toast ${type}`;
   toast.style.display = 'block';
-  setTimeout(() => {
-    toast.style.display = 'none';
-  }, 3000);
+  setTimeout(() => toast.style.display = 'none', 3000);
+}
+
+function showModal(modalId) {
+  q('#' + modalId).style.display = 'flex';
+}
+
+function hideModal(modalId) {
+  q('#' + modalId).style.display = 'none';
 }
 
 /* ===================== AUTH UI ===================== */
@@ -428,113 +428,86 @@ function requireLogin() {
     if (user) {
       currentAdmin = user;
       q('#adminEmail').innerText = user.email || '(no email)';
-      // load initial data
       refreshCounts();
       loadRecentAppointments();
       loadAllAppointments();
       loadUsers();
     } else {
-      // no user — show a simple prompt
       const email = prompt('Admin email:');
       const pass = prompt('Password:');
       if (!email || !pass) return alert('Login cancelled');
       auth.signInWithEmailAndPassword(email, pass)
-        .catch(err => alert('Login failed: '+err.message));
+        .catch(err => alert('Login failed: ' + err.message));
     }
   });
 }
-requireLogin();
 
-/* ========== NAV ========= */
-qAll('#nav a[data-page]').forEach(a=>{
-  a.addEventListener('click', e=>{
-    e.preventDefault();
-    showPage(a.dataset.page);
-  });
-});
-q('#btnSignOut').addEventListener('click', ()=> auth.signOut().then(()=>location.reload()));
-
-/* ========== UTILS ========= */
-function formatDate(d){ 
-  try{ 
+/* ===================== UTILITY FUNCTIONS ===================== */
+function formatDate(d) { 
+  try { 
     const dt = new Date(d); 
-    if(isNaN(dt)) return d; 
+    if (isNaN(dt)) return d; 
     return dt.toLocaleDateString('en-US', { 
       year: 'numeric', 
       month: 'long', 
       day: 'numeric'
     }); 
-  }catch(e){return d;} 
+  } catch(e) { return d; } 
 }
 
-function toCSV(rows, cols){
-  const esc = v => '"'+String(v||'').replace(/"/g,'""')+'"';
-  const head = cols.map(c=>esc(c)).join(',');
-  const body = rows.map(r => cols.map(c=>esc(r[c])).join(',')).join('\n');
+function toCSV(rows, cols) {
+  const esc = v => '"' + String(v || '').replace(/"/g, '""') + '"';
+  const head = cols.map(c => esc(c)).join(',');
+  const body = rows.map(r => cols.map(c => esc(r[c])).join(',')).join('\n');
   return head + '\n' + body;
 }
 
-function downloadFile(filename, content){
+function downloadFile(filename, content) {
   const a = document.createElement('a');
   a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(content);
   a.download = filename;
   a.click();
 }
 
-// Format phone number for display
 function formatPhoneForDisplay(phone) {
   if (!phone) return '—';
-  
-  // Remove non-digit characters
   const cleaned = phone.replace(/\D/g, '');
-  
-  // Format Philippine numbers (63XXXXXXXXXX or 09XXXXXXXXX)
   if (cleaned.startsWith('63') && cleaned.length === 12) {
     return `+${cleaned.substring(0, 2)} ${cleaned.substring(2, 5)} ${cleaned.substring(5, 8)} ${cleaned.substring(8)}`;
   } else if (cleaned.startsWith('09') && cleaned.length === 11) {
     return `+63 ${cleaned.substring(1, 4)} ${cleaned.substring(4, 7)} ${cleaned.substring(7)}`;
   }
-  
-  // Format other numbers
   return phone;
 }
 
-// Format phone number for API
 function formatPhoneNumber(phone, countryCode = '+63') {
   if (!phone) return '';
-  
-  // Remove non-digit characters
   const cleaned = phone.replace(/\D/g, '');
-  
-  // If it starts with 0, convert to +63 format (Philippines)
-  if (cleaned.startsWith('0')) {
-    return '+63' + cleaned.substring(1);
-  }
-  
-  // If it's already in +63 format
-  if (cleaned.startsWith('63')) {
-    return '+' + cleaned;
-  }
-  
-  // Add country code if not present
+  if (cleaned.startsWith('0')) return '+63' + cleaned.substring(1);
+  if (cleaned.startsWith('63')) return '+' + cleaned;
   return countryCode + cleaned;
 }
 
-// Validate phone number
 function validatePhoneNumber(phone) {
   if (!phone) return false;
-  // Remove all non-digit characters
   const cleaned = phone.replace(/\D/g, '');
-  // Check if it has at least 10 digits
   return cleaned.length >= 10;
+}
+
+function createActionButton(text, cls, handler) { 
+  const b = document.createElement('button'); 
+  b.className = 'small ' + cls; 
+  b.innerText = text; 
+  b.onclick = handler; 
+  b.style.marginRight = '4px';
+  b.style.marginBottom = '4px';
+  return b; 
 }
 
 /* ===================== SMS FUNCTIONS ===================== */
 async function sendSMS(phoneNumber, message) {
   try {
     showToast('Sending SMS...', 'info');
-    
-    // Format phone number
     const formattedPhone = formatPhoneNumber(phoneNumber);
     
     if (!validatePhoneNumber(formattedPhone)) {
@@ -542,202 +515,84 @@ async function sendSMS(phoneNumber, message) {
     }
     
     console.log('Sending SMS to:', formattedPhone);
-    console.log('Message:', message.substring(0, 50) + '...');
     
-    // Try different CORS proxies if one fails
-    const corsProxies = [
-      'https://corsproxy.io/?',
-      'https://api.allorigins.win/raw?url=',
-      'https://thingproxy.freeboard.io/fetch/'
-    ];
+    // Call Cloud Function
+    const response = await fetch(CLOUD_FUNCTION_SEND_SMS, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phoneNumber: formattedPhone, message })
+    });
     
-    let lastError = null;
-    
-    for (const proxy of corsProxies) {
-      try {
-        console.log('Trying proxy:', proxy);
-        
-        const response = await fetch(proxy + encodeURIComponent(SEMAPHORE_API_URL), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            apikey: SEMAPHORE_API_KEY,
-            number: formattedPhone,
-            message: message,
-            sendername: SEMAPHORE_SENDER_NAME
-          })
-        });
-        
-        console.log('Response status:', response.status);
-        
-        if (!response.ok) {
-          throw new Error(`Proxy returned status: ${response.status}`);
-        }
-        
-        const result = await response.json();
-        console.log('SMS API response:', result);
-        
-        if (result[0] && result[0].status === 'Pending') {
-          showToast('SMS sent successfully!');
-          return { success: true, data: result };
-        } else {
-          throw new Error(result[0]?.message || 'SMS not sent');
-        }
-      } catch (proxyError) {
-        console.log(`Proxy ${proxy} failed:`, proxyError.message);
-        lastError = proxyError;
-        continue; // Try next proxy
-      }
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
     }
     
-    // If all proxies failed, try direct with mode: 'no-cors' (limited)
-    console.log('All proxies failed, trying no-cors mode...');
+    const result = await response.json();
     
-    // Create a form submission as fallback (this won't give us a response but might work)
-    const manualInstructions = `
-    SMS SENDING INSTRUCTIONS:
-    
-    1. Open: https://semaphore.co/api
-    2. Use these parameters:
-       - API Key: ${SEMAPHORE_API_KEY.substring(0, 10)}...
-       - Number: ${formattedPhone}
-       - Message: ${message.substring(0, 100)}...
-       - Sender Name: ${SEMAPHORE_SENDER_NAME}
-    
-    3. OR use curl command:
-    curl -X POST https://api.semaphore.co/api/v4/messages \\
-      -H "Content-Type: application/json" \\
-      -d '{
-        "apikey": "${SEMAPHORE_API_KEY}",
-        "number": "${formattedPhone}",
-        "message": "${message.replace(/"/g, '\\"')}",
-        "sendername": "${SEMAPHORE_SENDER_NAME}"
-      }'
-    `;
-    
-    console.log(manualInstructions);
-    
-    // Show user the manual instructions
-    alert(`SMS ready to send!\n\nPhone: ${formattedPhone}\n\nCopy this message:\n${message}\n\nUse the Semaphore API console or curl command to send.`);
-    
-    // Simulate success for demo
-    return { 
-      success: true, 
-      data: { 
-        message: 'SMS prepared - use manual instructions above',
-        manualInstructions: manualInstructions
-      } 
-    };
-    
+    if (result.success) {
+      showToast('SMS sent successfully!');
+      return { success: true, data: result };
+    } else {
+      throw new Error(result.error || 'Failed to send SMS');
+    }
   } catch (error) {
     console.error('Error sending SMS:', error);
     showToast(`SMS failed: ${error.message}`, 'error');
-    return { success: false, error: error.message };
-  }
-}
-
-async function sendAppointmentReminderSMS(appointment) {
-  try {
-    if (!appointment.patientPhone && !appointment.phone) {
-      throw new Error('No phone number found for patient');
-    }
     
-    const phoneNumber = appointment.patientPhone || appointment.phone;
-    const formattedDate = formatDate(appointment.date);
+    // Fallback manual instructions
+    const manualInstructions = `SMS SENDING INSTRUCTIONS:\n\n1. Open: https://semaphore.co/api\n2. Use:\n   - API Key: ${SEMAPHORE_API_KEY}\n   - Number: ${phoneNumber}\n   - Message: ${message.substring(0, 100)}...\n   - Sender: ${SEMAPHORE_SENDER_NAME}`;
+    console.log(manualInstructions);
     
-    // Create SMS message
-    const message = `Hello ${appointment.patientName}! This is a reminder for your dental appointment at DentaBliss on ${formattedDate} at ${appointment.time}. Please arrive 10 minutes early. Call us at (02) 8888-9999 if you need to reschedule.`;
-    
-    return await sendSMS(phoneNumber, message);
-  } catch (error) {
-    console.error('Error sending appointment reminder SMS:', error);
-    return { success: false, error: error.message };
+    return { 
+      success: false, 
+      error: error.message,
+      manualInstructions 
+    };
   }
 }
 
 async function sendTomorrowSMSReminders() {
   try {
     showToast('Sending SMS reminders for tomorrow...', 'info');
+    const response = await fetch(CLOUD_FUNCTION_TOMORROW_REMINDERS, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
     
-    // Get tomorrow's date
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+    const result = await response.json();
     
-    // Get tomorrow's appointments
-    const appointmentsSnapshot = await db.collection('appointments')
-      .where('date', '==', tomorrowStr)
-      .where('status', 'in', ['Confirmed', 'Pending'])
-      .get();
-    
-    if (appointmentsSnapshot.empty) {
-      showToast('No appointments found for tomorrow', 'warning');
-      return { success: true, sent: 0, total: 0 };
+    if (result.success) {
+      showToast(`Sent ${result.summary?.smsSent || 0} SMS reminders!`);
+      refreshCounts();
+      loadRecentAppointments();
+      loadAllAppointments();
+      return { success: true, ...result };
+    } else {
+      throw new Error(result.error || 'Failed to send SMS reminders');
     }
-    
-    let sentCount = 0;
-    let totalCount = appointmentsSnapshot.size;
-    
-    for (const doc of appointmentsSnapshot.docs) {
-      const appointment = { id: doc.id, ...doc.data() };
-      
-      if (appointment.patientPhone || appointment.phone) {
-        const result = await sendAppointmentReminderSMS(appointment);
-        
-        if (result.success) {
-          sentCount++;
-          // Update appointment with SMS sent timestamp
-          await db.collection('appointments').doc(appointment.id).update({
-            smsSent: firebase.firestore.FieldValue.serverTimestamp(),
-            smsStatus: 'sent'
-          });
-        } else {
-          // Update with failed status
-          await db.collection('appointments').doc(appointment.id).update({
-            smsStatus: 'failed',
-            smsError: result.error
-          });
-        }
-        
-        // Delay to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      }
-    }
-    
-    showToast(`Successfully sent ${sentCount} out of ${totalCount} SMS reminders!`);
-    return { success: true, sent: sentCount, total: totalCount };
   } catch (error) {
-    console.error('Error sending tomorrow SMS reminders:', error);
-    showToast('Error sending tomorrow SMS reminders', 'error');
+    console.error('Error:', error);
+    showToast(`Error: ${error.message}`, 'error');
     return { success: false, error: error.message };
   }
 }
 
-/* ===================== SMS MODAL FUNCTIONS ===================== */
+/* ===================== SMS MODAL ===================== */
 let currentSMSAppointment = null;
 
 function openSMSModal(appointment) {
   currentSMSAppointment = appointment;
-  
-  // Populate modal fields
   q('#smsRecipientName').textContent = appointment.patientName || appointment.patient || 'Unknown';
-  q('#smsRecipientPhone').textContent = formatPhoneForDisplay(appointment.patientPhone || appointment.phone) || 'No phone number';
+  q('#smsRecipientPhone').textContent = formatPhoneForDisplay(appointment.patientPhone || appointment.phone) || 'No phone';
   q('#smsAppointmentDetails').textContent = `${appointment.service || 'Dental Appointment'} on ${appointment.date} at ${appointment.time}`;
-  
-  // Set default message based on template
   updateSMSMessage();
-  
-  // Show modal
-  q('#modalSendSMS').style.display = 'flex';
+  showModal('modalSendSMS');
 }
 
 function updateSMSMessage() {
   const template = q('#smsTemplate').value;
   const appointment = currentSMSAppointment;
   const formattedDate = formatDate(appointment.date);
-  
   let message = '';
   
   switch (template) {
@@ -762,25 +617,23 @@ function updateSMSPreview() {
   const message = q('#smsMessage').value;
   const charCount = message.length;
   const smsCount = Math.ceil(charCount / 160);
-  
   q('#smsPreview').innerHTML = `
     <strong>Preview (${charCount} chars, ${smsCount} SMS):</strong><br>
     ${message.replace(/\n/g, '<br>')}
   `;
 }
 
-// Initialize SMS modal event listeners
 function initSMSModal() {
   q('#smsTemplate').addEventListener('change', updateSMSMessage);
   q('#smsMessage').addEventListener('input', updateSMSPreview);
   
   q('#closeSMSModal').addEventListener('click', () => {
-    q('#modalSendSMS').style.display = 'none';
+    hideModal('modalSendSMS');
     currentSMSAppointment = null;
   });
   
   q('#smsCancel').addEventListener('click', () => {
-    q('#modalSendSMS').style.display = 'none';
+    hideModal('modalSendSMS');
     currentSMSAppointment = null;
   });
   
@@ -795,57 +648,88 @@ function initSMSModal() {
     
     const phoneNumber = appointment.patientPhone || appointment.phone;
     if (!phoneNumber) {
-      showToast('No phone number found for this patient', 'error');
+      showToast('No phone number found', 'error');
       return;
     }
     
     try {
       const result = await sendSMS(phoneNumber, message);
-      
       if (result.success) {
-        // Update appointment with SMS sent info
         await db.collection('appointments').doc(appointment.id).update({
           smsSent: firebase.firestore.FieldValue.serverTimestamp(),
           smsStatus: 'sent',
           lastSMSMessage: message.substring(0, 100)
         });
-        
-        q('#modalSendSMS').style.display = 'none';
-        showToast('SMS sent successfully!');
-        
-        // Refresh tables
+        hideModal('modalSendSMS');
         loadRecentAppointments();
         loadAllAppointments();
       }
     } catch (error) {
-      showToast(`Failed to send SMS: ${error.message}`, 'error');
+      showToast(`Failed: ${error.message}`, 'error');
     }
   });
   
-  // Test SMS functionality
   q('#testSMS').addEventListener('click', async () => {
     const testPhone = q('#testPhone').value.trim();
-    
     if (!testPhone) {
       showToast('Please enter a phone number', 'error');
       return;
     }
-    
-    const testMessage = `DentaBliss Test: This is a test message from the dental admin system. If you received this, SMS integration is working correctly.`;
-    
+    const testMessage = 'DentaBliss Test: SMS integration is working correctly!';
     try {
       const result = await sendSMS(testPhone, testMessage);
-      
-      if (result.success) {
-        showToast('Test SMS sent successfully!');
-      }
+      if (result.success) showToast('Test SMS sent!');
     } catch (error) {
-      showToast(`Test SMS failed: ${error.message}`, 'error');
+      showToast(`Test failed: ${error.message}`, 'error');
     }
   });
 }
 
-/* ========== TREATMENT HISTORY FUNCTIONS ========= */
+/* ===================== EMAIL FUNCTIONS ===================== */
+async function sendAppointmentReminder(appointmentId) {
+  try {
+    showToast('Sending email...', 'info');
+    const response = await fetch(CLOUD_FUNCTION_APPOINTMENT_REMINDER, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ appointmentId })
+    });
+    const result = await response.json();
+    if (response.ok && result.success) {
+      showToast('Email sent!');
+      return true;
+    } else {
+      throw new Error(result.error || 'Failed to send email');
+    }
+  } catch (error) {
+    console.error('Error:', error);
+    showToast(`Email failed: ${error.message}`, 'error');
+    return false;
+  }
+}
+
+async function sendTomorrowReminders() {
+  try {
+    showToast('Sending tomorrow reminders...', 'info');
+    const response = await fetch(CLOUD_FUNCTION_TOMORROW_REMINDERS, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const result = await response.json();
+    if (response.ok && result.success) {
+      showToast(`Sent ${result.results?.filter(r => r.success).length || 0} reminders!`);
+      return true;
+    } else {
+      throw new Error(result.error || 'Failed');
+    }
+  } catch (error) {
+    console.error('Error:', error);
+    showToast(`Failed: ${error.message}`, 'error');
+    return false;
+  }
+}
+
+/* ===================== TREATMENT HISTORY ===================== */
 async function showTreatmentHistory(userName, userEmail, userPhone) {
   q('#medicalHistoryTitle').innerText = `Treatment History: ${userName}`;
   q('#medicalPatientName').innerText = userName;
@@ -853,195 +737,96 @@ async function showTreatmentHistory(userName, userEmail, userPhone) {
   q('#medicalPatientPhone').innerText = formatPhoneForDisplay(userPhone) || 'No phone';
   
   const container = q('#treatmentHistoryContainer');
-  container.innerHTML = '<div class="no-data">Loading treatment history...</div>';
+  container.innerHTML = '<div class="no-data">Loading...</div>';
   
   try {
-    const appointmentSnapshot = await db.collection('appointments')
+    const snapshot = await db.collection('appointments')
       .where('patientEmail', '==', userEmail)
       .orderBy('date', 'desc')
       .get();
     
-    if (!appointmentSnapshot.empty) {
-      const appointments = appointmentSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
-      const today = new Date().toISOString().slice(0,10);
-      const pastAppointments = appointments.filter(appt => appt.date <= today || appt.status === 'Completed');
+    if (!snapshot.empty) {
+      const appointments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const pastAppointments = appointments.filter(appt => appt.date <= new Date().toISOString().slice(0,10) || appt.status === 'Completed');
       
       if (pastAppointments.length > 0) {
         container.innerHTML = '';
-        
         pastAppointments.forEach(appt => {
           const historyItem = document.createElement('div');
           historyItem.className = 'medical-history-item';
-          
           const formattedDate = formatDate(appt.date);
           const statusClass = appt.status?.toLowerCase() || 'pending';
-          
           const smsStatus = appt.smsStatus;
           let smsBadge = '';
-          if (smsStatus === 'sent') {
-            smsBadge = '<span class="sms-status sms-sent">SMS Sent</span>';
-          } else if (smsStatus === 'failed') {
-            smsBadge = '<span class="sms-status sms-failed">SMS Failed</span>';
-          }
+          if (smsStatus === 'sent') smsBadge = '<span class="sms-status sms-sent">SMS Sent</span>';
+          else if (smsStatus === 'failed') smsBadge = '<span class="sms-status sms-failed">SMS Failed</span>';
           
           historyItem.innerHTML = `
             <div class="medical-history-header">
               <h4 class="medical-history-service">${appt.service || 'Dental Treatment'} ${smsBadge}</h4>
               <div class="medical-history-date">${formattedDate} at ${appt.time || ''}</div>
             </div>
-            
             <div class="medical-history-details">
-              <div class="medical-history-row">
-                <span class="medical-history-label">Date:</span>
-                <span class="medical-history-value">${appt.date || 'N/A'}</span>
-              </div>
-              
-              <div class="medical-history-row">
-                <span class="medical-history-label">Time:</span>
-                <span class="medical-history-value">${appt.time || 'N/A'}</span>
-              </div>
-              
-              <div class="medical-history-row">
-                <span class="medical-history-label">Dentist:</span>
-                <span class="medical-history-value">${appt.dentist || 'N/A'}</span>
-              </div>
-              
-              <div class="medical-history-row">
-                <span class="medical-history-label">Status:</span>
-                <span class="medical-history-value">
-                  <span class="status-${statusClass}" style="display:inline-block;padding:4px 8px;border-radius:4px;font-size:12px">
-                    ${appt.status || 'Pending'}
-                  </span>
-                </span>
+              <div class="medical-history-row"><span class="medical-history-label">Date:</span><span class="medical-history-value">${appt.date || 'N/A'}</span></div>
+              <div class="medical-history-row"><span class="medical-history-label">Time:</span><span class="medical-history-value">${appt.time || 'N/A'}</span></div>
+              <div class="medical-history-row"><span class="medical-history-label">Dentist:</span><span class="medical-history-value">${appt.dentist || 'N/A'}</span></div>
+              <div class="medical-history-row"><span class="medical-history-label">Status:</span>
+                <span class="medical-history-value"><span class="status-${statusClass}" style="display:inline-block;padding:4px 8px;border-radius:4px;font-size:12px">${appt.status || 'Pending'}</span></span>
               </div>
             </div>
-            
-            ${appt.notes ? `
-            <div class="medical-history-notes">
-              <strong>Notes:</strong> ${appt.notes}
-            </div>
-            ` : ''}
-            
+            ${appt.notes ? `<div class="medical-history-notes"><strong>Notes:</strong> ${appt.notes}</div>` : ''}
             <div style="border-top:1px dashed #e2e8f0;margin-top:16px;padding-top:8px"></div>
           `;
-          
           container.appendChild(historyItem);
         });
       } else {
-        container.innerHTML = '<div class="no-data">No treatment history found for this patient</div>';
+        container.innerHTML = '<div class="no-data">No treatment history found</div>';
       }
     } else {
-      container.innerHTML = '<div class="no-data">No appointments found for this patient</div>';
+      container.innerHTML = '<div class="no-data">No appointments found</div>';
     }
-    
-    q('#modalMedicalHistory').style.display = 'flex';
-    
+    showModal('modalMedicalHistory');
   } catch (error) {
-    console.error('Error loading treatment history:', error);
-    container.innerHTML = '<div class="no-data">Error loading treatment history. Please try again.</div>';
-    showToast('Error loading treatment history', 'error');
-    q('#modalMedicalHistory').style.display = 'flex';
+    console.error('Error:', error);
+    container.innerHTML = '<div class="no-data">Error loading history</div>';
+    showToast('Error loading history', 'error');
+    showModal('modalMedicalHistory');
   }
 }
 
 window.showTreatmentHistory = showTreatmentHistory;
 
-/* ========== EMAIL REMINDER FUNCTIONS ========= */
-async function sendAppointmentReminder(appointmentId) {
+/* ===================== APPOINTMENT FUNCTIONS ===================== */
+async function refreshCounts() {
   try {
-    showToast('Sending reminder email...', 'info');
-    
-    const response = await fetch('https://us-central1-dentabliss.cloudfunctions.net/sendAppointmentReminder', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        appointmentId: appointmentId
-      })
-    });
-    
-    const result = await response.json();
-    
-    if (response.ok && result.success) {
-      showToast('Reminder email sent successfully!');
-      return true;
-    } else {
-      showToast('Failed to send reminder email: ' + (result.error || 'Unknown error'), 'error');
-      return false;
-    }
-  } catch (error) {
-    console.error('Error sending reminder:', error);
-    showToast('Error sending reminder email', 'error');
-    return false;
-  }
-}
-
-async function sendTomorrowReminders() {
-  try {
-    showToast('Sending reminders for tomorrow...', 'info');
-    
-    const response = await fetch('https://us-central1-dentabliss.cloudfunctions.net/sendTomorrowReminders', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      }
-    });
-    
-    const result = await response.json();
-    
-    if (response.ok && result.success) {
-      showToast(`Successfully sent ${result.results?.filter(r => r.success).length || 0} reminders!`);
-      return true;
-    } else {
-      showToast('Failed to send tomorrow reminders: ' + (result.error || 'Unknown error'), 'error');
-      return false;
-    }
-  } catch (error) {
-    console.error('Error sending tomorrow reminders:', error);
-    showToast('Error sending tomorrow reminders', 'error');
-    return false;
-  }
-}
-
-/* ===================== APPOINTMENTS ===================== */
-async function refreshCounts(){
-  try{
     const snapTotal = await db.collection('appointments').get();
     q('#countAppointments').innerText = snapTotal.size;
-
-    const today = new Date(); const next7 = new Date(); next7.setDate(today.getDate()+7);
+    
+    const today = new Date();
+    const next7 = new Date();
+    next7.setDate(today.getDate() + 7);
     const sToday = today.toISOString().slice(0,10);
     const sNext7 = next7.toISOString().slice(0,10);
+    
     const snapNext = await db.collection('appointments')
-      .where('date','>=', sToday)
-      .where('date','<=', sNext7)
+      .where('date', '>=', sToday)
+      .where('date', '<=', sNext7)
       .get();
     q('#countNext7').innerText = snapNext.size;
-
-    const snapPending = await db.collection('appointments').where('status','==','Pending').get();
+    
+    const snapPending = await db.collection('appointments').where('status', '==', 'Pending').get();
     q('#countPending').innerText = snapPending.size;
-
+    
     const snapUsers = await db.collection('users').get();
     q('#countUsers').innerText = snapUsers.size;
-  }catch(e){console.error(e)}
+  } catch(e) { console.error(e); }
 }
 
-function createActionButton(text, cls, handler){ 
-  const b=document.createElement('button'); 
-  b.className='small '+cls; 
-  b.innerText=text; 
-  b.onclick=handler; 
-  b.style.marginRight = '4px';
-  b.style.marginBottom = '4px';
-  return b; 
-}
-
-async function loadRecentAppointments(limit=8){
+async function loadRecentAppointments(limit = 8) {
   const tbody = q('#appointmentsTable tbody');
   tbody.innerHTML = '<tr><td colspan="8">Loading…</td></tr>';
-  try{
+  
+  try {
     const today = new Date().toISOString().slice(0,10);
     const snap = await db.collection('appointments')
       .where('date', '>=', today)
@@ -1049,200 +834,119 @@ async function loadRecentAppointments(limit=8){
       .orderBy('time')
       .limit(limit)
       .get();
-
-    const rows = snap.docs.map(d => ({ id:d.id, ...d.data() }));
-    if(!rows.length) tbody.innerHTML = '<tr><td colspan="8">No recent appointments</td></tr>';
-    else {
-      tbody.innerHTML = '';
-      rows.forEach(r=>{
-        const tr=document.createElement('tr');
-        const statusClass = `status-${(r.status || 'pending').toLowerCase()}`;
-        
-        const phoneToCheck = r.patientPhone || r.phone;
-        const phoneDisplay = formatPhoneForDisplay(phoneToCheck);
-        
-        tr.innerHTML = `
-          <td>${r.date||''}</td>
-          <td>${r.time||''}</td>
-          <td>${r.patientName||r.patient || '—'}</td>
-          <td>${phoneDisplay}</td>
-          <td>${r.service||''}</td>
-          <td>${r.dentist||''}</td>
-          <td><span class="${statusClass}">${r.status||'Pending'}</span></td>
-          <td></td>
-        `;
-        const actionsCell = tr.querySelector('td:last-child');
-        
-        actionsCell.style.minWidth = '200px';
-
-        if (r.status !== 'Confirmed') {
-          actionsCell.appendChild(createActionButton('Confirm','btn-primary', async ()=>{
-            await db.collection('appointments').doc(r.id).update({
-              status:'Confirmed', 
-              updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
-            await sendAppointmentReminder(r.id);
-            await refreshCounts(); 
-            loadRecentAppointments(limit); 
-            loadAllAppointments();
-          }));
-        }
-
-        if (r.status !== 'Cancelled') {
-          actionsCell.appendChild(createActionButton('Cancel','btn-ghost', async ()=>{
-            await db.collection('appointments').doc(r.id).update({
-              status:'Cancelled', 
-              updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
-            await refreshCounts(); 
-            loadRecentAppointments(limit); 
-            loadAllAppointments();
-          }));
-        }
-
-        const appointmentDate = new Date(r.date);
-        const todayDate = new Date();
-        if (r.status === 'Confirmed' && appointmentDate < todayDate) {
-          actionsCell.appendChild(createActionButton('Complete','btn-success', async ()=>{
-            await db.collection('appointments').doc(r.id).update({
-              status:'Completed', 
-              updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
-            await refreshCounts(); 
-            loadRecentAppointments(limit); 
-            loadAllAppointments();
-          }));
-        }
-
-        // SMS button always visible
-        actionsCell.appendChild(createActionButton('SMS','btn-info', async ()=>{
-          await openSMSModal(r);
-        }));
-
-        actionsCell.appendChild(createActionButton('Email','btn-success', async ()=>{
-          await sendAppointmentReminder(r.id);
-        }));
-
-        actionsCell.appendChild(createActionButton('Delete','btn-danger', async ()=>{
-          if(confirm('Delete appointment?')){ 
-            await db.collection('appointments').doc(r.id).delete(); 
-            await refreshCounts(); 
-            loadRecentAppointments(limit); 
-            loadAllAppointments(); 
-          }
-        }));
-
-        tbody.appendChild(tr);
-      });
+    
+    const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="8">No recent appointments</td></tr>';
+    } else {
+      renderAppointmentsTable(rows, tbody);
     }
-  }catch(e){ console.error(e); tbody.innerHTML = '<tr><td colspan="8">Error loading</td></tr>'; }
+  } catch(e) { 
+    console.error(e); 
+    tbody.innerHTML = '<tr><td colspan="8">Error loading</td></tr>'; 
+  }
 }
 
-async function loadAllAppointments(){
+async function loadAllAppointments() {
   const tbody = q('#allAppointmentsTable tbody');
   tbody.innerHTML = '<tr><td colspan="8">Loading…</td></tr>';
-  try{
+  
+  try {
     const snap = await db.collection('appointments').orderBy('date').orderBy('time').get();
-    const rows = snap.docs.map(d => ({ id:d.id, ...d.data() }));
-    if(!rows.length) tbody.innerHTML = '<tr><td colspan="8">No appointments</td></tr>';
-    else {
-      tbody.innerHTML = '';
-      rows.forEach(r=>{
-        const tr=document.createElement('tr');
-        const statusClass = `status-${(r.status || 'pending').toLowerCase()}`;
-        
-        const phoneToCheck = r.patientPhone || r.phone;
-        const phoneDisplay = formatPhoneForDisplay(phoneToCheck);
-        
-        tr.innerHTML = `
-          <td>${r.date||''}</td>
-          <td>${r.time||''}</td>
-          <td>${r.patientName||r.patient||''}</td>
-          <td>${phoneDisplay}</td>
-          <td>${r.service||''}</td>
-          <td>${r.dentist||''}</td>
-          <td><span class="${statusClass}">${r.status||'Pending'}</span></td>
-          <td></td>`;
-        const cell = tr.querySelector('td:last-child');
-        
-        cell.style.minWidth = '200px';
-        
-        if (r.status !== 'Confirmed') {
-          cell.appendChild(createActionButton('Confirm','btn-primary', async ()=>{
-            await db.collection('appointments').doc(r.id).update({
-              status:'Confirmed', 
-              updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
-            await sendAppointmentReminder(r.id);
-            await refreshCounts(); 
-            loadRecentAppointments(); 
-            loadAllAppointments();
-          }));
-        }
-        
-        if (r.status !== 'Cancelled') {
-          cell.appendChild(createActionButton('Cancel','btn-ghost', async ()=>{
-            await db.collection('appointments').doc(r.id).update({
-              status:'Cancelled', 
-              updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
-            await refreshCounts(); 
-            loadRecentAppointments(); 
-            loadAllAppointments();
-          }));
-        }
-
-        const appointmentDate = new Date(r.date);
-        const todayDate = new Date();
-        if (r.status === 'Confirmed' && appointmentDate < todayDate) {
-          cell.appendChild(createActionButton('Complete','btn-success', async ()=>{
-            await db.collection('appointments').doc(r.id).update({
-              status:'Completed', 
-              updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
-            await refreshCounts(); 
-            loadRecentAppointments(); 
-            loadAllAppointments();
-          }));
-        }
-        
-        // SMS button always visible
-        cell.appendChild(createActionButton('SMS','btn-info', async ()=>{
-          await openSMSModal(r);
-        }));
-        
-        cell.appendChild(createActionButton('Email','btn-success', async ()=>{
-          await sendAppointmentReminder(r.id);
-        }));
-        
-        cell.appendChild(createActionButton('Delete','btn-danger', async ()=>{
-          if(confirm('Delete appointment?')){ 
-            await db.collection('appointments').doc(r.id).delete(); 
-            await refreshCounts(); 
-            loadRecentAppointments(); 
-            loadAllAppointments(); 
-          }
-        }));
-        
-        tbody.appendChild(tr);
-      });
+    const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="8">No appointments</td></tr>';
+    } else {
+      renderAppointmentsTable(rows, tbody);
     }
-  }catch(e){ console.error(e); tbody.innerHTML = '<tr><td colspan="8">Error loading</td></tr>'; }
+  } catch(e) { 
+    console.error(e); 
+    tbody.innerHTML = '<tr><td colspan="8">Error loading</td></tr>'; 
+  }
+}
+
+function renderAppointmentsTable(rows, tbody) {
+  tbody.innerHTML = '';
+  
+  rows.forEach(r => {
+    const tr = document.createElement('tr');
+    const statusClass = `status-${(r.status || 'pending').toLowerCase()}`;
+    const phoneDisplay = formatPhoneForDisplay(r.patientPhone || r.phone);
+    
+    tr.innerHTML = `
+      <td>${r.date || ''}</td>
+      <td>${r.time || ''}</td>
+      <td>${r.patientName || r.patient || '—'}</td>
+      <td>${phoneDisplay}</td>
+      <td>${r.service || ''}</td>
+      <td>${r.dentist || ''}</td>
+      <td><span class="${statusClass}">${r.status || 'Pending'}</span></td>
+      <td></td>
+    `;
+    
+    const cell = tr.querySelector('td:last-child');
+    cell.style.minWidth = '200px';
+    
+    if (r.status !== 'Confirmed') {
+      cell.appendChild(createActionButton('Confirm', 'btn-primary', async () => {
+        await db.collection('appointments').doc(r.id).update({ status: 'Confirmed', updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+        await sendAppointmentReminder(r.id);
+        refreshCounts();
+        loadRecentAppointments();
+        loadAllAppointments();
+      }));
+    }
+    
+    if (r.status !== 'Cancelled') {
+      cell.appendChild(createActionButton('Cancel', 'btn-ghost', async () => {
+        await db.collection('appointments').doc(r.id).update({ status: 'Cancelled', updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+        refreshCounts();
+        loadRecentAppointments();
+        loadAllAppointments();
+      }));
+    }
+    
+    const appointmentDate = new Date(r.date);
+    const todayDate = new Date();
+    if (r.status === 'Confirmed' && appointmentDate < todayDate) {
+      cell.appendChild(createActionButton('Complete', 'btn-success', async () => {
+        await db.collection('appointments').doc(r.id).update({ status: 'Completed', updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+        refreshCounts();
+        loadRecentAppointments();
+        loadAllAppointments();
+      }));
+    }
+    
+    cell.appendChild(createActionButton('SMS', 'btn-info', async () => openSMSModal(r)));
+    cell.appendChild(createActionButton('Email', 'btn-success', async () => sendAppointmentReminder(r.id)));
+    cell.appendChild(createActionButton('Delete', 'btn-danger', async () => {
+      if (confirm('Delete appointment?')) {
+        await db.collection('appointments').doc(r.id).delete();
+        refreshCounts();
+        loadRecentAppointments();
+        loadAllAppointments();
+      }
+    }));
+    
+    tbody.appendChild(tr);
+  });
 }
 
 /* ===================== USERS ===================== */
-async function loadUsers(){
+async function loadUsers() {
   const tbody = q('#usersTable tbody');
   tbody.innerHTML = '<tr><td colspan="6">Loading…</td></tr>';
-  try{
+  
+  try {
     const snap = await db.collection('users').orderBy('name').get();
-    const rows = snap.docs.map(d=>({id:d.id,...d.data()}));
-    if(!rows.length) tbody.innerHTML = '<tr><td colspan="6">No users</td></tr>';
-    else {
+    const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="6">No users</td></tr>';
+    } else {
       tbody.innerHTML = '';
-      rows.forEach(u=>{
-        const tr=document.createElement('tr');
-        
+      rows.forEach(u => {
+        const tr = document.createElement('tr');
         const userName = u.name || 'User';
         const userEmail = u.email || '';
         const userPhone = u.phone || u.mobile || '';
@@ -1256,7 +960,7 @@ async function loadUsers(){
           </td>
           <td>${userEmail}</td>
           <td>${formatPhoneForDisplay(userPhone) || '—'}</td>
-          <td>${u.faceData ? 'Yes':'No'}</td>
+          <td>${u.faceData ? 'Yes' : 'No'}</td>
           <td>
             <button class="btn small btn-warning" onclick="showTreatmentHistory('${userName.replace(/'/g, "\\'")}', '${userEmail.replace(/'/g, "\\'")}', '${userPhone.replace(/'/g, "\\'")}')">
               View History
@@ -1265,172 +969,178 @@ async function loadUsers(){
           <td></td>`;
         
         const cell = tr.querySelector('td:last-child');
-        cell.appendChild(createActionButton('Delete','btn-danger', async ()=>{
-          if(confirm('Delete user? This will not revoke auth record.')) {
+        cell.appendChild(createActionButton('Delete', 'btn-danger', async () => {
+          if (confirm('Delete user?')) {
             await db.collection('users').doc(u.id).delete();
-            await loadUsers();
-            await refreshCounts();
+            loadUsers();
+            refreshCounts();
           }
         }));
         tbody.appendChild(tr);
       });
     }
-  }catch(e){ console.error(e); tbody.innerHTML = '<tr><td colspan="6">Error loading</td></tr>'; }
+  } catch(e) { 
+    console.error(e); 
+    tbody.innerHTML = '<tr><td colspan="6">Error loading</td></tr>'; 
+  }
 }
 
-/* ===================== CREATE APPOINTMENT (modal) ===================== */
-q('#btnNewAppointment').addEventListener('click', ()=> {
-  q('#modalNew').style.display = 'flex';
-  q('#mDate').value = '';
-  q('#mTime').value = '';
-  q('#mPatient').value = '';
-  q('#mEmail').value = '';
-  q('#mPhone').value = '';
-  q('#mService').value = '';
-  q('#mDentist').value = '';
-  q('#mNotes').value = '';
-});
-
-q('#mCancel').addEventListener('click', ()=> q('#modalNew').style.display = 'none');
-q('#mCreate').addEventListener('click', async ()=>{
-  const date=q('#mDate').value.trim(), time=q('#mTime').value.trim(), patient=q('#mPatient').value.trim();
-  const email=q('#mEmail').value.trim(), phone=q('#mPhone').value.trim(), countryCode=q('#mCountryCode').value;
-  const service=q('#mService').value.trim(), dentist=q('#mDentist').value.trim(), notes=q('#mNotes').value.trim();
-  
-  if(!date||!time||!patient){ return alert('Date, time and patient required'); }
-  
-  const id = db.collection('appointments').doc().id;
-  const fullPhone = phone ? countryCode + phone.replace(/\D/g, '') : '';
-  
-  await db.collection('appointments').doc(id).set({
-    appointmentId: id,
-    userId: 'admin-created',
-    patientName: patient,
-    patientEmail: email || '',
-    patientPhone: fullPhone,
-    service: service || '',
-    dentist: dentist || '',
-    date: date,
-    time: time,
-    notes: notes || '',
-    status: 'Pending',
-    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+/* ===================== EVENT LISTENERS ===================== */
+function initEventListeners() {
+  // Navigation
+  qAll('#nav a[data-page]').forEach(a => {
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      showPage(a.dataset.page);
+    });
   });
   
-  q('#modalNew').style.display = 'none';
-  showToast('Appointment created successfully!');
-  await refreshCounts(); loadRecentAppointments(); loadAllAppointments();
-});
-
-/* ========== SEND REMINDERS ========= */
-q('#btnSendReminders').addEventListener('click', async () => {
-  if (confirm('Send reminder emails for all tomorrow\'s confirmed appointments?')) {
-    await sendTomorrowReminders();
-  }
-});
-
-q('#btnSendSMSReminders').addEventListener('click', async () => {
-  if (confirm('Send SMS reminders for all tomorrow\'s confirmed appointments?')) {
-    await sendTomorrowSMSReminders();
-  }
-});
-
-/* ========== MEDICAL HISTORY MODAL CONTROLS ========= */
-q('#closeMedicalHistory').addEventListener('click', ()=> q('#modalMedicalHistory').style.display = 'none');
-q('#closeMedicalHistoryBtn').addEventListener('click', ()=> q('#modalMedicalHistory').style.display = 'none');
-
-q('#modalMedicalHistory').addEventListener('click', (e) => {
-  if (e.target === q('#modalMedicalHistory')) {
-    q('#modalMedicalHistory').style.display = 'none';
-  }
-});
-
-[q('#modalNew'), q('#modalSendSMS')].forEach(modal => {
-  modal.addEventListener('click', (e) => {
-    if (e.target === modal) {
-      modal.style.display = 'none';
-      if (modal.id === 'modalSendSMS') {
-        currentSMSAppointment = null;
-      }
+  q('#btnSignOut').addEventListener('click', () => auth.signOut().then(() => location.reload()));
+  
+  // New Appointment Modal
+  q('#btnNewAppointment').addEventListener('click', () => showModal('modalNew'));
+  q('#mCancel').addEventListener('click', () => hideModal('modalNew'));
+  q('#mCancelBtn').addEventListener('click', () => hideModal('modalNew'));
+  
+  q('#mCreate').addEventListener('click', async () => {
+    const date = q('#mDate').value.trim();
+    const time = q('#mTime').value.trim();
+    const patient = q('#mPatient').value.trim();
+    const email = q('#mEmail').value.trim();
+    const phone = q('#mPhone').value.trim();
+    const countryCode = q('#mCountryCode').value;
+    const service = q('#mService').value.trim();
+    const dentist = q('#mDentist').value.trim();
+    const notes = q('#mNotes').value.trim();
+    
+    if (!date || !time || !patient) {
+      alert('Date, time and patient required');
+      return;
+    }
+    
+    const id = db.collection('appointments').doc().id;
+    const fullPhone = phone ? countryCode + phone.replace(/\D/g, '') : '';
+    
+    await db.collection('appointments').doc(id).set({
+      appointmentId: id,
+      userId: 'admin-created',
+      patientName: patient,
+      patientEmail: email || '',
+      patientPhone: fullPhone,
+      service: service || '',
+      dentist: dentist || '',
+      date: date,
+      time: time,
+      notes: notes || '',
+      status: 'Pending',
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    
+    hideModal('modalNew');
+    showToast('Appointment created!');
+    refreshCounts();
+    loadRecentAppointments();
+    loadAllAppointments();
+  });
+  
+  // Reminder Buttons
+  q('#btnSendReminders').addEventListener('click', async () => {
+    if (confirm('Send reminder emails for tomorrow\'s confirmed appointments?')) {
+      await sendTomorrowReminders();
     }
   });
-});
-
-/* ========== SEARCH / FILTER / EXPORT ========= */
-q('#globalSearch').addEventListener('input', (e)=>{
-  const term = e.target.value.toLowerCase();
-  filterTables(term);
-});
-
-function filterTables(term){
-  qAll('#appointmentsTable tbody tr').forEach(tr=>{
-    const text = tr.innerText.toLowerCase();
-    tr.style.display = text.includes(term) ? '' : 'none';
+  
+  q('#btnSendSMSReminders').addEventListener('click', async () => {
+    if (confirm('Send SMS reminders for tomorrow\'s confirmed appointments?')) {
+      await sendTomorrowSMSReminders();
+    }
   });
-  qAll('#allAppointmentsTable tbody tr').forEach(tr=>{
-    const text = tr.innerText.toLowerCase();
-    tr.style.display = text.includes(term) ? '' : 'none';
+  
+  // Medical History Modal
+  q('#closeMedicalHistory').addEventListener('click', () => hideModal('modalMedicalHistory'));
+  q('#closeMedicalHistoryBtn').addEventListener('click', () => hideModal('modalMedicalHistory'));
+  
+  // Search and Filter
+  q('#globalSearch').addEventListener('input', (e) => {
+    const term = e.target.value.toLowerCase();
+    qAll('#appointmentsTable tbody tr, #allAppointmentsTable tbody tr, #usersTable tbody tr').forEach(tr => {
+      tr.style.display = tr.innerText.toLowerCase().includes(term) ? '' : 'none';
+    });
   });
-  qAll('#usersTable tbody tr').forEach(tr=>{
-    const text = tr.innerText.toLowerCase();
-    tr.style.display = text.includes(term) ? '' : 'none';
+  
+  q('#btnRefresh').addEventListener('click', async () => {
+    await refreshCounts();
+    loadRecentAppointments();
+    loadAllAppointments();
+    loadUsers();
+    showToast('Data refreshed!');
+  });
+  
+  q('#filterStatus').addEventListener('change', (e) => {
+    const val = e.target.value;
+    qAll('#allAppointmentsTable tbody tr').forEach(tr => {
+      tr.style.display = (!val || tr.innerText.includes(val)) ? '' : 'none';
+    });
+  });
+  
+  // Export
+  q('#btnExportCSV').addEventListener('click', () => {
+    const rows = Array.from(qAll('#appointmentsTable tbody tr')).map(tr => {
+      const cols = tr.querySelectorAll('td');
+      return { 
+        date: cols[0].innerText, 
+        time: cols[1].innerText, 
+        patient: cols[2].innerText, 
+        phone: cols[3].innerText,
+        service: cols[4].innerText, 
+        dentist: cols[5].innerText, 
+        status: cols[6].innerText 
+      };
+    }).filter(r => r.date);
+    const csv = toCSV(rows, ['date', 'time', 'patient', 'phone', 'service', 'dentist', 'status']);
+    downloadFile('appointments.csv', csv);
+    showToast('CSV exported!');
+  });
+  
+  q('#btnExportAll').addEventListener('click', () => {
+    const rows = Array.from(qAll('#allAppointmentsTable tbody tr')).map(tr => {
+      const cols = tr.querySelectorAll('td');
+      return { 
+        date: cols[0].innerText, 
+        time: cols[1].innerText, 
+        patient: cols[2].innerText, 
+        phone: cols[3].innerText,
+        service: cols[4].innerText, 
+        dentist: cols[5].innerText, 
+        status: cols[6].innerText,
+      };
+    }).filter(r => r.date);
+    const csv = toCSV(rows, ['date', 'time', 'patient', 'phone', 'service', 'dentist', 'status']);
+    downloadFile('appointments_all.csv', csv);
+    showToast('All appointments CSV exported!');
+  });
+  
+  // Modal click outside to close
+  qAll('.modal').forEach(modal => {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        hideModal(modal.id);
+        if (modal.id === 'modalSendSMS') currentSMSAppointment = null;
+      }
+    });
   });
 }
 
-q('#btnRefresh').addEventListener('click', async ()=>{
-  await refreshCounts(); loadRecentAppointments(); loadAllAppointments(); loadUsers();
-  showToast('Data refreshed!');
-});
-
-q('#filterStatus').addEventListener('change', (e)=>{
-  const val = e.target.value;
-  qAll('#allAppointmentsTable tbody tr').forEach(tr=>{
-    tr.style.display = (!val || tr.innerText.includes(val)) ? '' : 'none';
-  });
-});
-
-q('#btnExportCSV').addEventListener('click', async ()=>{
-  const rows = Array.from(document.querySelectorAll('#appointmentsTable tbody tr')).map(tr=>{
-    const cols = tr.querySelectorAll('td');
-    return { 
-      date: cols[0].innerText, 
-      time: cols[1].innerText, 
-      patient: cols[2].innerText, 
-      phone: cols[3].innerText,
-      service: cols[4].innerText, 
-      dentist: cols[5].innerText, 
-      status: cols[6].innerText 
-    };
-  }).filter(r=>r.date);
-  const csv = toCSV(rows, ['date','time','patient','phone','service','dentist','status']);
-  downloadFile('appointments.csv', csv);
-  showToast('CSV exported successfully!');
-});
-
-q('#btnExportAll').addEventListener('click', async ()=>{
-  const rows = Array.from(document.querySelectorAll('#allAppointmentsTable tbody tr')).map(tr=>{
-    const cols = tr.querySelectorAll('td');
-    return { 
-      date: cols[0].innerText, 
-      time: cols[1].innerText, 
-      patient: cols[2].innerText, 
-      phone: cols[3].innerText,
-      service: cols[4].innerText, 
-      dentist: cols[5].innerText, 
-      status: cols[6].innerText,
-    };
-  }).filter(r=>r.date);
-  const csv = toCSV(rows, ['date','time','patient','phone','service','dentist','status']);
-  downloadFile('appointments_all.csv', csv);
-  showToast('All appointments CSV exported!');
-});
-
-/* ========== INITIAL load ========== */
-async function initialLoad(){
-  showPage('dashboard');
+/* ===================== INITIALIZATION ===================== */
+async function initializeApp() {
+  requireLogin();
+  initEventListeners();
   initSMSModal();
+  showPage('dashboard');
 }
-initialLoad();
+
+// Start the app
+initializeApp();
 </script>
 
 </body>
